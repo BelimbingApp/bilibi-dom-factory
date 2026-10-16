@@ -10,7 +10,15 @@ pub const ITEM_VIEW: &str = "commerce.inventory.item.view";
 pub const MANAGE: &str = "commerce.inventory.manage";
 pub const CONFIGURATION_VIEW: &str = "factory.inventory.configuration.view";
 pub const CONFIGURATION_MANAGE: &str = "factory.inventory.configuration.manage";
-pub const CAPABILITIES: [&str; 7] = [ITEM_CREATE, ITEM_LIST, ITEM_UPDATE, ITEM_VIEW, MANAGE, CONFIGURATION_VIEW, CONFIGURATION_MANAGE];
+pub const CAPABILITIES: [&str; 7] = [
+    ITEM_CREATE,
+    ITEM_LIST,
+    ITEM_UPDATE,
+    ITEM_VIEW,
+    MANAGE,
+    CONFIGURATION_VIEW,
+    CONFIGURATION_MANAGE,
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Unit {

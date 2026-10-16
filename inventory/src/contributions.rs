@@ -20,6 +20,24 @@ inventory::submit! { Contribution::new(VOCABULARY, "factory/inventory", Provenan
     roles: &[role()], system_principals: &[],
 }) }
 
-bilibi_menu::contribute!("factory/inventory", MenuItem::group("admin.factory", "Factory").icon("building-office-2").under("admin").order(80));
-bilibi_menu::contribute!("factory/inventory", MenuItem::page("admin.factory.units", "Units", "/factory/units").under("admin.factory").requires(Requirement::Capability(CONFIGURATION_VIEW)).order(20));
-bilibi_menu::contribute!("factory/inventory", MenuItem::page("admin.factory.materials", "Materials", "/factory/materials").under("admin.factory").requires(Requirement::Capability(CONFIGURATION_VIEW)).order(5));
+bilibi_menu::contribute!(
+    "factory/inventory",
+    MenuItem::group("admin.factory", "Factory")
+        .icon("building-office-2")
+        .under("admin")
+        .order(80)
+);
+bilibi_menu::contribute!(
+    "factory/inventory",
+    MenuItem::page("admin.factory.units", "Units", "/factory/units")
+        .under("admin.factory")
+        .requires(Requirement::Capability(CONFIGURATION_VIEW))
+        .order(20)
+);
+bilibi_menu::contribute!(
+    "factory/inventory",
+    MenuItem::page("admin.factory.materials", "Materials", "/factory/materials")
+        .under("admin.factory")
+        .requires(Requirement::Capability(CONFIGURATION_VIEW))
+        .order(5)
+);
