@@ -1,0 +1,22 @@
+# Walkthrough fixture for the Factory container: never a product dependency and
+# never discovered (Platform discovery skips `fixtures/`). It is its own
+# Cargo workspace root so it can be built and run from here once the container
+# is mounted; see the container README ("Walkthrough fixture").
+[package]
+name = "bilibi-factory-walkthrough"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+bilibi-authz = { path = "../../../../base/authz" }
+bilibi-database = { path = "../../../../base/database" }
+bilibi-tenancy = { path = "../../../../base/tenancy" }
+bilibi-factory-inventory = { path = "../../inventory" }
+bilibi-walkthrough-fixture = { path = "../../../../../fixtures/walkthrough" }
+bilibi-web = { path = "../../../../web" }
+tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7"

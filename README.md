@@ -1,0 +1,74 @@
+# bilibi-dom-factory
+
+Factory Domain for [Bilibi](https://github.com/BelimbingApp/bilibi): Inventory,
+and in later slices Product Definition and Production Execution. It is one
+optional, independently versioned repository that a manufacturing adopter
+mounts into a Bilibi checkout; it does not build on its own. It is the Rust
+port of Bilimbi's [`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory),
+with the same module IDs, capability keys, table names and wording.
+
+| Module | Descriptor ID | Crate | State |
+| --- | --- | --- | --- |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (slice X0); catalog, ledger, genealogy and pages follow |
+| `product_definition/` | `factory/product_definition` | `bilibi-factory-product-definition` | not yet ported |
+| `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
+
+Factory declares no dependency on any other Domain container, and no Domain
+depends on it; modules inside it depend on each other only through their
+facades (see [`AGENTS.md`](AGENTS.md)).
+
+## Mount
+
+Clone this repository into a Bilibi checkout at `apps/domains/factory` (a real
+checkout, never a symlink), then work from the Bilibi root:
+
+```sh
+git clone https://github.com/BelimbingApp/bilibi-dom-factory.git apps/domains/factory
+python3 scripts/discover-modules.py
+cargo build -p bilibi-web
+```
+
+Discovery reads [`bilibi.container.toml`](bilibi.container.toml); no list names
+the container. Removing the folder removes Factory's code from the next build
+and keeps its data. The mount, naming, composition and pinning rules are in the
+Platform's `apps/domains/AGENTS.md`.
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) is the Platform's
+reference Domain workflow. It checks out Bilibi at the revision in
+[`.github/bilibi-revision`](.github/bilibi-revision), mounts this repository
+and runs `scripts/domain-ci.sh`: discovery, the committed-CSS check, `cargo
+fmt`, `clippy -D warnings`, the locked release build, `migrate`,
+`seed-production`, and a boot that loads `/`. Reproduce it locally with the
+container mounted and `DATABASE_URL` on an empty PostgreSQL 18 database:
+
+```sh
+DATABASE_URL=postgres://… ./scripts/domain-ci.sh
+```
+
+Bump `.github/bilibi-revision` to build against a newer Platform.
+
+## Walkthrough fixture
+
+[`fixtures/walkthrough`](fixtures/walkthrough/src/main.rs) is not a module and
+not product data: discovery skips `fixtures/`, and it is its own Cargo
+workspace root so a mounted checkout can run it. On a disposable, freshly
+migrated database it installs the Platform walkthrough fixture and then drives
+the Inventory facade as real signed-in accounts, printing every outcome and
+refusal. It asserts nothing; read the output.
+
+```sh
+cargo run -q -p bilibi-web -- migrate        # from the Bilibi root, DATABASE_URL set
+cd apps/domains/factory/fixtures/walkthrough
+cp ../../../../../Cargo.lock .               # same dependency versions as the Platform
+BILIBI_FACTORY_FIXTURE=disposable cargo run
+```
+
+Set `CARGO_TARGET_DIR` to share build output with the Platform. The fixture
+creates its own data; production installs carry none (`seed-production` seeds
+nothing for Factory).
+
+## License
+
+[MIT](LICENSE).
