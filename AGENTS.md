@@ -1,0 +1,85 @@
+# bilibi-dom-factory Agent Guide
+
+This repository is the Factory Domain for Bilibi. It is not a standalone Cargo
+project: it builds only when mounted in a Bilibi checkout at
+`apps/domains/factory` (see `README.md`). Read the Platform's root and
+`apps/domains/AGENTS.md`, `apps/base/ui/AGENTS.md` and
+`apps/base/ports/README.md` in that checkout before changing anything here; they
+govern this code and are not copied here. Bilimbi's
+[`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory) is the
+behaviour reference: port IDs, labels, capability keys, flash texts and
+confirmations verbatim.
+
+## Architecture
+
+- Make each module deep: one small facade over its own records (`Inventory` in
+  `inventory/src/lib.rs`), with schema, SQL, validation and helpers private,
+  not a `pub` row type, query function or helper for a caller to reach. A
+  later page in the same crate uses the facade like any caller. `pub` is for
+  what the facade's signatures need and nothing else.
+- Keep this Domain free of every other Domain: never add a Cargo dependency, a
+  descriptor edge, a port call or a SQL reference (a table or column name) to
+  another Domain container, because the containers must mount and build alone.
+  A cross-domain flow will use Base domain events (a Platform slice in
+  progress); until then leave a clearly named `TODO(<seam>)` where it belongs
+  and reach across nothing.
+- Between modules of this Domain, depend only on a facade, declared in the
+  module's descriptor and `Cargo.toml`, only where Bilimbi has the same edge
+  (Product Definition → Inventory; Production Execution → Inventory and Product
+  Definition), and with no cycle. Do not read another module's table or call its
+  private helper, and do not add an edge Bilimbi lacks.
+
+## Working here
+
+- Mount a real copy (`git clone` into `apps/domains/factory`), never a symlink,
+  and commit only inside this repository. Never commit the Platform's
+  `apps/domains/Cargo.toml`, `apps/domains/src/lib.rs` or `Cargo.lock`.
+- The container root holds `bilibi.container.toml`, docs, CI and `fixtures/`
+  only: no `Cargo.toml`, `[workspace]` or `Cargo.lock`. A module is an immediate
+  child folder with its own `Cargo.toml` (crate `bilibi-factory-<module>`,
+  inheriting the workspace), `README.md` (its owner contract), `migrations/` and
+  `src/`; add `templates/` and `askama.toml` (`dirs = ["templates",
+  "../../../base/ui/templates"]`) with the module's first page.
+- Module IDs are `factory/<module>`. Name migrations
+  `factory-<module>-NNN-<slug>` (underscores become hyphens), written as the end
+  state of Bilimbi's schema, not its incremental history; never edit an applied
+  file, add the next number. Every table carries `tenant_id` and `company_id`
+  with a composite foreign key to `companies(tenant_id, id)`.
+- Domain code uses only meta-terms: material, material type, resource, resource
+  type, property, operation, output role, process family. A specific industry,
+  material, product, line, status or currency name is a company's configuration
+  data (its types, their property definitions, its item settings); it never
+  appears in identifiers, schema constants, inclusion lists or defaults, and a
+  fixture carries one only as data. Read item statuses and the default currency
+  through `Inventory::item_settings`, never from a constant.
+- Do not hard-code what an operator could set (limits, scopes, codes,
+  vocabularies): declare a Base setting with an editor, as `contributions.rs`
+  does for `factory.inventory.item_statuses`.
+- Write through `MutationBoundary`, not a bare transaction: `audited!` in
+  `inventory/src/lib.rs` begins the transaction, the module's write returns every
+  affected row as a `Change` (an empty `{}` for `old` on a create, or the audit
+  event reads "updated"), and only a saved outcome commits. Check the capability
+  in the facade on every write-shaped path (`access::writable`), and decide a
+  refusal (a taken code, a retired record) before `mutate`, which treats a write
+  with no `Change` as invalid.
+- Use `bilibi_company::organisation::{authorize_target, require_live,
+  require_writable}` for the company, not `companies` SQL of your own.
+- Lists are `FlexTable` with `ListColumns`, and a page composes Platform
+  components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
+  the Platform stylesheet lacks is a Platform change.
+- Prove behaviour by running it, not with unit tests: `scripts/domain-ci.sh`
+  from the Platform root with the container mounted and `DATABASE_URL` on an
+  empty PostgreSQL 18 database, and `fixtures/walkthrough` (README, "Walkthrough
+  fixture") for the facade. A proof creates its own data in a disposable
+  database; the production seeds carry none.
+- CI is `.github/workflows/ci.yml`, the Platform's `docs/domain-ci/ci.yml`
+  unchanged but for `CONTAINER_ID`; the Platform revision it builds against is
+  the single line in `.github/bilibi-revision`. Do not hand-roll another gate
+  list.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

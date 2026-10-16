@@ -92,9 +92,9 @@ pub(crate) fn statuses_valid(value: &Value) -> bool {
 /// An ISO 4217 shaped code: three upper-case ASCII letters.
 pub(crate) fn currency_valid(value: &Value) -> bool {
     value.is_null()
-        || value
-            .as_str()
-            .is_some_and(|code| code.len() == 3 && code.bytes().all(|byte| byte.is_ascii_uppercase()))
+        || value.as_str().is_some_and(|code| {
+            code.len() == 3 && code.bytes().all(|byte| byte.is_ascii_uppercase())
+        })
 }
 
 inventory::submit! { Contribution::new(DEFINITIONS, ITEM_STATUSES_KEY, provenance!(), &Setting::Definition(Definition {

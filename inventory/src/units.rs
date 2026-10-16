@@ -153,7 +153,7 @@ pub(crate) async fn create(
                     )
                     .await?;
                 let unit = read(&row);
-                let change = Change { kind: "factory_inventory_units".into(), id: unit.id, old: Value::Null, new: audited(&unit) };
+                let change = Change { kind: "factory_inventory_units".into(), id: unit.id, old: json!({}), new: audited(&unit) };
                 Ok((unit, vec![change]))
             })
         })

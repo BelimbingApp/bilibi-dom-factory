@@ -3,9 +3,7 @@
 //! Base Settings for the company, then its tenant.
 use crate::{
     access::{readable, writable},
-    contributions::{
-        currency_valid, statuses_valid, DEFAULT_CURRENCY_KEY, ITEM_STATUSES_KEY,
-    },
+    contributions::{currency_valid, statuses_valid, DEFAULT_CURRENCY_KEY, ITEM_STATUSES_KEY},
     error::Error,
 };
 use bilibi_database::{Error as DatabaseError, MutationTransaction};

@@ -8,7 +8,7 @@ use crate::{
 };
 use bilibi_database::{Change, MutationTransaction};
 use bilibi_tenancy::Scope;
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio_postgres::{GenericClient, Row};
 
 /// One company's stock location.
@@ -137,7 +137,7 @@ pub(crate) async fn create(
                 let change = Change {
                     kind: "factory_inventory_locations".into(),
                     id: location.id,
-                    old: Value::Null,
+                    old: json!({}),
                     new: json!({"company_id":location.company_id,"code":location.code,"name":location.name}),
                 };
                 Ok((location, vec![change]))

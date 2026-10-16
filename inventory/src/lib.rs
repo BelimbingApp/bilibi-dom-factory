@@ -53,11 +53,7 @@ type Result<T> = std::result::Result<T, Error>;
 /// A pooled connection for a read, as `&tokio_postgres::Client`.
 macro_rules! connection {
     ($self:ident, $name:ident) => {
-        let $name = $self
-            .db
-            .get()
-            .await
-            .map_err(bilibi_database::Error::from)?;
+        let $name = $self.db.get().await.map_err(bilibi_database::Error::from)?;
         let $name: &tokio_postgres::Client = &$name;
     };
 }
@@ -65,11 +61,7 @@ macro_rules! connection {
 /// committed only when it saved.
 macro_rules! audited {
     ($self:ident, $scope:ident, $action:literal, |$tx:ident| $write:expr) => {{
-        let mut client = $self
-            .db
-            .get()
-            .await
-            .map_err(bilibi_database::Error::from)?;
+        let mut client = $self.db.get().await.map_err(bilibi_database::Error::from)?;
         let mut $tx = $self
             .mutations
             .begin(&mut client, $scope.mutation_context($action))
@@ -113,9 +105,12 @@ impl Inventory {
         company_id: i64,
         new: &ItemSettings,
     ) -> Result<ItemSettings> {
-        audited!(self, scope, "factory.inventory.configure_item_settings", |tx| {
-            settings::configure(&mut tx, &self.settings, scope, company_id, new).await
-        })
+        audited!(
+            self,
+            scope,
+            "factory.inventory.configure_item_settings",
+            |tx| { settings::configure(&mut tx, &self.settings, scope, company_id, new).await }
+        )
     }
 
     /// The company's units ordered by code, at most `limit` (default 100,
@@ -135,12 +130,7 @@ impl Inventory {
         units::get(client, scope, company_id, unit_id).await
     }
 
-    pub async fn create_unit(
-        &self,
-        scope: &Scope,
-        company_id: i64,
-        new: &NewUnit,
-    ) -> Result<Unit> {
+    pub async fn create_unit(&self, scope: &Scope, company_id: i64, new: &NewUnit) -> Result<Unit> {
         audited!(self, scope, "factory.inventory.create_unit", |tx| {
             units::create(&mut tx, scope, company_id, new).await
         })
