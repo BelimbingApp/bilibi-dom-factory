@@ -107,9 +107,12 @@ BEGIN
   END IF;
   RETURN NEW;
  END IF;
- IF TG_TABLE_NAME = 'factory_inventory_materials' AND (NEW.item_id IS DISTINCT FROM OLD.item_id
-    OR NEW.native_unit_id IS DISTINCT FROM OLD.native_unit_id OR NEW.material_type_id IS DISTINCT FROM OLD.material_type_id) THEN
-  RAISE EXCEPTION 'A material keeps its item, native unit and type' USING ERRCODE = 'integrity_constraint_violation';
+ -- Nested, because PL/pgSQL resolves every field an expression names.
+ IF TG_TABLE_NAME = 'factory_inventory_materials' THEN
+  IF NEW.item_id IS DISTINCT FROM OLD.item_id OR NEW.native_unit_id IS DISTINCT FROM OLD.native_unit_id
+     OR NEW.material_type_id IS DISTINCT FROM OLD.material_type_id THEN
+   RAISE EXCEPTION 'A material keeps its item, native unit and type' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
  END IF;
  IF OLD.retired_at IS NOT NULL AND NEW.retired_at IS DISTINCT FROM OLD.retired_at THEN
   RAISE EXCEPTION 'A retired % stays retired', TG_TABLE_NAME USING ERRCODE = 'integrity_constraint_violation';
