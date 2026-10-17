@@ -132,6 +132,16 @@ async fn main() -> Result<(), Error> {
                 && body.html.contains("Page &#60;entry&#62;")
                 && body.html.contains(code),
         )?;
+        let body = event(
+            &mut state,
+            &manager,
+            json!({"type":"clear-flash","key":"success"}),
+        )
+        .await?;
+        verify(
+            &format!("{operation} dismisses success without a write"),
+            !body.html.contains(&format!("{noun} saved.")) && body.html.contains(code),
+        )?;
         let rows = match operation {
             "wastage-reasons" => pe.list_wastage_reasons(&manager, company, None).await?,
             "labour-roles" => pe.list_labour_roles(&manager, company, None).await?,

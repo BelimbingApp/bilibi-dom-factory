@@ -334,6 +334,10 @@ impl Floor {
     }
     pub(super) async fn event(&mut self, scope: &Scope, p: &Value) -> Result<()> {
         self.success = None;
+        // Shared flashes emit this on dismissal, including the success timer.
+        if s::text(p, "type") == "clear-flash" {
+            return Ok(());
+        }
         if self.labour_event(scope, p).await? {
             return Ok(());
         }

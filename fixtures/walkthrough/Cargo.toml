@@ -81,3 +81,8 @@ path = "src/production_operations.rs"
 [[bin]]
 name = "labour-pages"
 path = "src/labour_pages.rs"
+
+# V4 browser host: empty-state sweep, then the populated floor walkthroughs.
+[[bin]]
+name = "factory-pages"
+path = "src/factory_pages.rs"

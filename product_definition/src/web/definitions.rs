@@ -158,6 +158,7 @@ impl Definitions {
         self.notice.begin();
         let kind = s::text(payload, "type").ok_or(bilibi_database::Error::Invalid)?;
         match kind {
+            "clear-flash" => return Ok(()),
             // Each table raises its own event, so its columns are the ones touched.
             "grid_products" => {
                 s::grid(&mut self.products_columns, payload);
