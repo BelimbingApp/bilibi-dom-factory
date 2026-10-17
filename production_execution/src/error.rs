@@ -4,6 +4,8 @@ use bilibi_database::Error as DatabaseError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("{0}")]
+    Capture(&'static str),
     #[error("Order not found")]
     OrderNotFound,
     #[error("Execution not found")]

@@ -1,10 +1,9 @@
 # Production Execution
 
-`ProductionExecution` owns production orders, completed operation executions
-and material hold overrides. Resolve `SERVICE`
+`ProductionExecution` owns production orders, completed operation executions,
+material hold overrides and shop-floor capture. Resolve `SERVICE`
 (`factory/production_execution.production_execution`) from the service
-registry. This is XP1; shop-floor capture (wastage, labour, measurements, yield
-and traces) is XP2 and the pages and menu entries follow in XP3/XP4. It mirrors
+registry. XP1 and XP2 are implemented; pages and menu entries follow in XP3/XP4. It mirrors
 Bilimbi `ProductionExecution` at `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 
 ## Facade
@@ -86,12 +85,41 @@ already recorded request is not checked again.
 
 ## Data
 
-Three tables with tenant and company ownership; product, resource and Inventory
+Nine tables with tenant and company ownership; product, resource and Inventory
 references are opaque IDs the sibling facades validated (no SQL dependence on
 their tables, no cross-container reference). PostgreSQL refuses UPDATE, DELETE
 and TRUNCATE on executions and overrides. Every saved row is audited with
 complete old/new data. There are no production seeds, agent operations, CSS or
 JavaScript.
+
+## Shop-floor capture (XP2)
+
+Configuration uses `create_`, `update_`, `get_` and `list_` methods for `wastage_reason`, `labour_role` and `measurement_type` (plural lists). Creates and updates accept JSON attribute objects (`&serde_json::Value`); results are JSON objects, retaining Bilimbi's map-shaped contract. Lists take an optional active filter and sort by code. These reads require `configuration.view`; writes require `configuration.manage` inside the mutation. Codes are trimmed, uppercased and immutable; labels and active status can change. Measurement types carry immutable `value_type` (`string`, `integer`, `decimal`, `boolean`) and optional numeric `unit` label, with mutable minimum, maximum and target. Limits have at most 12 decimal places and absolute values below 10¹². Minimum cannot exceed maximum; target need not be in range.
+
+Capture methods take `(scope, company, target_id, &attrs)` and return JSON objects. Lists take `(scope, company, target_id)` and retain all historical rows with nullable `corrected_by_id`. Quantities and limits are exact decimal strings; timestamps are RFC3339 strings; absent values are JSON null. Tenant/company ownership and retry fingerprints stay private. Recorder and stopper identity come only from Scope. A recorder must belong to the target company; impersonation refuses with `Capture refused under impersonation`. Agents retain their acting-for user. Each capture checks its capability before the transaction (preserving refusal decisions) and again inside it. Grant capture capabilities explicitly: they are not added to `tenant_owner`, matching Bilimbi.
+
+| Method | Target and attrs | Capability suffix |
+| --- | --- | --- |
+| `record_wastage` | Run; request/reason/item/location/quantity/observation, optional identity/note/occurred_at | `wastage.record` |
+| `correct_wastage` | Previous capture; request/reason for correction/absolute nonnegative quantity, optional reason_id/note | `wastage.correct` |
+| `clock_in` | Order; request/role, optional worker/run/note; server time only | `labour.record` (own), `labour.manage` (others) |
+| `clock_out` | Entry; no attrs or retry key; server time and stopper | Same ownership rule |
+| `record_labour` | Order; request/role/worker/run/note plus past started_at/stopped_at, stop strictly after start | Same ownership rule |
+| `correct_labour` | Previous entry; request/correction_reason, optional role/run/note/start/stop; omitted retains, null stop reopens | `labour.manage` |
+| `record_measurement` | Run; request/measurement_type_id/value, optional output identity/note/measured_at | `measurement.record` |
+| `correct_measurement` | Previous measurement; request/correction_reason/value, optional note | `measurement.correct` |
+
+Suffixes are under `factory.production-execution.`. Attr names are Bilimbi's: `request_id`, `reason_id`, `item_id`, `location_id`, `quantity`, `observation`, `identity_id`, `role_id`, `worker_user_id`, `execution_id`, `note`, `correction_reason`, `started_at`, `stopped_at`, `occurred_at`, `measured_at`. Own labour defaults to the Scope user; an agent explicitly names a worker and needs manage. Worker assignments use Core User's company-accounts read on the mutation connection. Current intervals can touch but cannot overlap across any orders. The writable-company lock serializes capture writers, preventing concurrent open clocks and branched corrections. `list_labour` and `labour_summary` target the order; the summary excludes superseded rows and totals closed seconds by worker and nullable run, with open entries separate.
+
+Wastage must name a stock item/identity in the run and uses its native unit. Its row and Inventory production consumption commit together. Capture corrections point to their immediate predecessor; Inventory corrections post `previous − replacement` against the root consumption. Zero voids wastage; unchanged quantity appends evidence without a posting. Inventory retry keys use `pe-wastage:`, distinct from XP1's unrestricted `pe:` namespace. Event times are no earlier than run start and no later than now, not bounded by completion.
+
+Measurements use Inventory's property-value validator and snapshot unit/limits/target. Values below minimum or above maximum flag out of range; endpoints are valid. Nonnumeric types or no bounds give null (target alone never flags). Corrections preserve original snapshots, including after deactivation. Non-null identity must name a positive stock output of the run.
+
+Every request ID is company-local within its capture table, nonblank and at most 240 bytes. SHA-256 fingerprints cover action, target and whitelisted caller intent, excluding generated times and recorder identity. Identical retries return existing evidence without a new audit action; conflicting content refuses. Corrections have one successor and may themselves be corrected, always with a reason. PostgreSQL refuses UPDATE/DELETE/TRUNCATE of wastage and measurements; labour permits only a one-time close. Every saved row returns a complete audit `Change`.
+
+## Traces and yield
+
+`trace_backward` and `trace_forward` enrich Inventory genealogy with runs, order revisions, resource, times and source. Forward traces include draws of every visited identity, retaining consumption-only runs. `get_run_yield` returns exact native-unit input/product/trim/waste/wastage/variance totals and correction posting IDs. Wastage adjusts the original material side and increases recorded waste; waste includes wastage. Arithmetic stays in PostgreSQL over Inventory facade results, never sibling SQL or Decimal native totals. `get_unit_yield` returns whole-run balances plus identity-specific input/output, not invented allocations. Cross-unit agreement passes through Inventory's recorded-conversion balance. No yield percentage is invented.
 
 ## Runtime proof
 
@@ -103,3 +131,12 @@ completion in all three posting shapes, idempotent and concurrent retries,
 atomic rollback when Inventory or the execution record fails, hold rules and
 overrides (denied, impersonated, live and imported), capability and tenant
 isolation, SQL immutability and audit records.
+
+Then run `shop-floor` on that same disposable database:
+
+```sh
+BILIBI_FACTORY_FIXTURE=disposable CARGO_TARGET_DIR="$HOME/bilibi/target" \
+  cargo run --manifest-path fixtures/walkthrough/Cargo.toml --bin shop-floor
+```
+
+The XP2 executable checks code normalization/immutability/deactivation, wastage delta chains and stock/yield, atomic rollback after posting, range snapshots and output identity validation, own/supervisor clocks and corrections, cross-order overlap/adjacency/reopening, inactive worker refusal, concurrent retries, impersonation/company/tenant refusals, SQL immutability and audit counts. It installs no product data or routes.

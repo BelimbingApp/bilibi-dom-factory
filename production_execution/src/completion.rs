@@ -3,6 +3,7 @@
 //! effects through Inventory and records the execution with its override
 //! evidence. This module holds the posting authority: Inventory accepts a
 //! production posting only from this contributed static.
+use crate::AUTHORITY;
 use crate::{
     contributions::{HOLD_OVERRIDE, MANAGE},
     model::{Approver, Completion, HoldOverrideRequest, Order, Source},
@@ -10,11 +11,9 @@ use crate::{
 };
 use bilibi_database::{Change, Db, MutationBoundary};
 use bilibi_factory_inventory::{
-    Decimal, Inventory, MaterialTransaction, PostingAuthority, PostingRequest, StockLine,
-    POSTING_AUTHORITIES,
+    Decimal, Inventory, MaterialTransaction, PostingRequest, StockLine,
 };
 use bilibi_factory_product_definition::{ProductDefinition, SelectedRevisions};
-use bilibi_module_registry::{Contribution, Provenance};
 use bilibi_tenancy::Scope;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -22,13 +21,6 @@ use std::{
     collections::{BTreeMap, HashSet},
     time::{Duration, SystemTime},
 };
-
-/// Private on purpose: Inventory accepts only this contributed static's
-/// address, so no other crate can post as Production Execution.
-static AUTHORITY: PostingAuthority = PostingAuthority::declare("factory/production_execution");
-inventory::submit! { Contribution::new(POSTING_AUTHORITIES,"factory/production_execution",Provenance {
-    module:"factory/production_execution",source:file!(),line:line!(),
-}, &AUTHORITY) }
 
 const ACTION: &str = "factory.production_execution.complete_operation";
 

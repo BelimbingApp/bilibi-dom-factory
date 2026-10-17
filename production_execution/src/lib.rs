@@ -1,7 +1,7 @@
 //! Bilimbi.Factory.ProductionExecution: production orders with exact
 //! formula/routing revisions, completed operation executions posted
 //! atomically through Inventory's production postings, and material hold
-//! overrides. Shop-floor capture and pages belong to the later XP2-XP4 slices.
+//! overrides, shop-floor capture, correction chains, traces and yield.
 use bilibi_database::{Db, MutationBoundary};
 use bilibi_factory_inventory::Inventory;
 use bilibi_factory_product_definition::ProductDefinition;
@@ -9,16 +9,23 @@ use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_tenancy::Scope;
 use std::sync::Arc;
 
+mod capture;
+mod codes;
 mod completion;
 mod contributions;
 mod error;
+mod labour;
+mod measurements;
 mod model;
 mod orders;
+mod outcomes;
+mod wastage;
 pub use error::Error;
 pub use model::{
     Approver, Completion, Execution, HoldOverride, HoldOverrideRequest, NewOrder, Order, OrderKind,
     Source,
 };
+pub use outcomes::{ProductionTrace, RunYield, TraceOrder, TraceRun, UnitYield, YieldBalance};
 
 pub const SERVICE: &str = "factory/production_execution.production_execution";
 type Result<T> = std::result::Result<T, Error>;
@@ -26,6 +33,15 @@ type Result<T> = std::result::Result<T, Error>;
 const DEFAULT_ORDER_LIMIT: i64 = 50;
 const DEFAULT_LIMIT: i64 = 100;
 const MAXIMUM_LIMIT: i64 = 500;
+
+// Shared only inside this module: Inventory accepts this contributed address.
+static AUTHORITY: bilibi_factory_inventory::PostingAuthority =
+    bilibi_factory_inventory::PostingAuthority::declare("factory/production_execution");
+inventory::submit! { bilibi_module_registry::Contribution::new(
+    bilibi_factory_inventory::POSTING_AUTHORITIES,"factory/production_execution",
+    bilibi_module_registry::Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &AUTHORITY
+) }
 
 pub struct ProductionExecution {
     db: Db,
@@ -219,8 +235,9 @@ impl ProductionExecution {
 
 inventory::submit! { Module {
     id: "factory/production_execution", layer: Layer::Domains,
-    dependencies: &["base/authz","base/database","base/module_registry","base/tenancy","core/company","factory/inventory","factory/product_definition"],
-    migrations: &[("factory-production-execution-001-orders-executions",include_str!("../migrations/001-orders-executions.sql"))],
+    dependencies: &["base/authz","base/database","base/module_registry","base/tenancy","core/company","core/user","factory/inventory","factory/product_definition"],
+    migrations: &[("factory-production-execution-001-orders-executions",include_str!("../migrations/001-orders-executions.sql")),
+        ("factory-production-execution-002-shop-floor-capture",include_str!("../migrations/002-shop-floor-capture.sql"))],
     services: &[Service { id:SERVICE, factory: |services| {
         let db = services.get::<Db>("base/database.pool")?.as_ref().clone();
         let mutations: Arc<MutationBoundary> = services.get("base/database.mutations")?;

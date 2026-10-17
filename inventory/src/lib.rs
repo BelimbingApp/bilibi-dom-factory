@@ -527,6 +527,18 @@ impl Inventory {
         ledger::get(client, scope, company_id, transaction_id).await
     }
 
+    /// Reads immutable posting evidence on a sibling's mutation connection,
+    /// retaining authorization without acquiring a second pooled connection.
+    pub async fn get_transaction_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        transaction_id: i64,
+    ) -> Result<MaterialTransaction> {
+        ledger::get(client, scope, company_id, transaction_id).await
+    }
+
     /// Most recent IDs first, optionally containing one item (100, at most 500).
     pub async fn list_transactions(
         &self,
