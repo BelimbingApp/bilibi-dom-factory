@@ -473,6 +473,15 @@ inventory::submit! {
             ),
         ],
         services: &[Service {
+            id: SERVICE,
+            factory: |services| {
+                Ok(Arc::new(Inventory {
+                    db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
+                    mutations: services.get("base/database.mutations")?,
+                    settings: services.get("base/settings.store")?,
+                }))
+            },
+        }, Service {
             id: pages::SERVICE,
             factory: |services| {
                 Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(
@@ -481,15 +490,6 @@ inventory::submit! {
                         inventory: services.get(SERVICE)?,
                     }),
                 )))
-            },
-        }, Service {
-            id: SERVICE,
-            factory: |services| {
-                Ok(Arc::new(Inventory {
-                    db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
-                    mutations: services.get("base/database.mutations")?,
-                    settings: services.get("base/settings.store")?,
-                }))
             },
         }],
     }
