@@ -152,3 +152,7 @@ Timestamps use Base Datetime's display policy and shared timestamp component. `s
 ### Page proof
 
 On a disposable migrated database, run the existing `production-execution` and `shop-floor` walkthrough binaries, then `floor-pages` from `fixtures/walkthrough` with the same `BILIBI_FACTORY_FIXTURE=disposable`, `DATABASE_URL`, and Platform `CARGO_TARGET_DIR`. It drives the registered PageService and real facade mutations (selection, range flags, both corrections, retry, stale permission and archived company refusals), plus the same company-time source. `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35593 BIND_ADDR=127.0.0.1:35593` keeps the composed app running for browser proof after the checks. No fixture data is a product seed.
+
+## Reviewed production operations (H6)
+
+H6 adds headless order creation, live/import completion and hold-override reads through the Platform agent registry and reviewed safe-write plans. It retains the facade's existing capability checks and private Inventory posting authority; no page or new capability is introduced. Prerequisites that need generated IDs (a new order or output identity) must be committed in a separate plan before referring to them. Plans commit atomically but preview each operation against committed data, not earlier speculative operations.
