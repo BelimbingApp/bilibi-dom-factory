@@ -35,10 +35,10 @@ mod ledger_request;
 mod locations;
 mod material_types;
 mod materials;
-mod web;
 mod property;
 mod settings;
 mod units;
+mod web;
 
 pub use authority::{PostingAuthority, POSTING_AUTHORITIES};
 pub use balance::{Balance, BalanceConversion, CrossUnitBalance, UnitBalance};
