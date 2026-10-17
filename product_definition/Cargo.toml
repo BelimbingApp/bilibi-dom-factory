@@ -7,11 +7,14 @@ license.workspace = true
 publish = false
 
 [dependencies]
+askama.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true
+bilibi-menu.workspace = true
 bilibi-module-registry.workspace = true
 bilibi-tenancy.workspace = true
+bilibi-ui.workspace = true
 bilibi-factory-inventory = { path = "../inventory" }
 deadpool-postgres.workspace = true
 inventory.workspace = true

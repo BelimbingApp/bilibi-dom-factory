@@ -94,9 +94,9 @@ async fn items(
     inventory: &Inventory,
     scope: &Scope,
     company: i64,
-    ids: impl Iterator<Item = i64>,
+    ids: HashSet<i64>,
 ) -> Result<()> {
-    for id in ids.collect::<HashSet<_>>() {
+    for id in ids {
         match inventory.get_material_on(client, scope, company, id).await {
             Ok(material) if material.retired => return Err(InventoryError::MaterialRetired.into()),
             Ok(_) | Err(InventoryError::MaterialNotFound) => {}
@@ -120,7 +120,7 @@ pub(crate) async fn formula(
         inventory,
         scope,
         company,
-        lines.iter().map(|l| l.item_id),
+        lines.iter().map(|l| l.item_id).collect(),
     )
     .await?;
     for id in lines.iter().map(|l| l.unit_id).collect::<HashSet<_>>() {
@@ -166,14 +166,19 @@ pub(crate) async fn routing(
         company,
         operations
             .iter()
-            .flat_map(|op| op.inputs.iter().chain(&op.outputs).copied()),
+            .flat_map(|op| op.inputs.iter().chain(&op.outputs).copied())
+            .collect(),
     )
     .await?;
-    for id in operations
+    // Collected before the first await: an iterator over `operations` held
+    // across one would make the facade's future unprovably `Send` for pages.
+    let allowed: Vec<i64> = operations
         .iter()
         .flat_map(|op| op.allowed_resource_ids.iter().copied())
         .collect::<HashSet<_>>()
-    {
+        .into_iter()
+        .collect();
+    for id in allowed {
         let resource: Resource = store::fetch(tx.sql(), scope, company, Kind::Resource, id).await?;
         if resource.retired {
             return Err(Error::ResourceRetired);
