@@ -9,23 +9,26 @@ use bilibi_authz::{
     grants::Grants, CapabilityDefinition, RoleDefinition, VocabularyContribution, VOCABULARY,
 };
 use bilibi_database::pool;
-use bilibi_factory_inventory::{Inventory, ItemSettings, NewLocation, NewUnit, SERVICE};
+use bilibi_factory_inventory::{
+    Decimal, Inventory, ItemSettings, ItemUpdate, Map, MaterialTypeUpdate, MaterialTyping, NewItem,
+    NewLocation, NewMaterialType, NewUnit, PropertyDefinition, Value, SERVICE,
+};
 use bilibi_tenancy::Scope;
 use std::fmt::Debug;
 
 bilibi_walkthrough_fixture::walkthrough_vocabulary!();
 bilibi_walkthrough_fixture::walkthrough_module_roles!();
 
-// The fixture's roles hold Inventory's capabilities: the manager configures,
-// the viewer reads, staff holds none. These keys are Inventory's own (declared
+// The fixture's roles hold Inventory's capabilities: the manager configures
+// and keeps the item master, the viewer reads, staff holds none. These keys are Inventory's own (declared
 // by the mounted crate); the roles are the Platform fixture's.
 bilibi_walkthrough_fixture::inventory::submit! { bilibi_walkthrough_fixture::registry::Contribution::new(VOCABULARY, "factory.walkthrough.roles", bilibi_walkthrough_fixture::registry::Provenance { module: "base/authz", source: file!(), line: line!() }, &VocabularyContribution {
     domains: &[],
     verbs: &[],
     capabilities: &[] as &[CapabilityDefinition],
     roles: &[
-        RoleDefinition { code: "manager", name: "manager", description: "Walkthrough fixture role", grant_all: false, capabilities: &["factory.inventory.configuration.view", "factory.inventory.configuration.manage"] },
-        RoleDefinition { code: "viewer", name: "viewer", description: "Walkthrough fixture role", grant_all: false, capabilities: &["factory.inventory.configuration.view"] },
+        RoleDefinition { code: "manager", name: "manager", description: "Walkthrough fixture role", grant_all: false, capabilities: &["factory.inventory.configuration.view", "factory.inventory.configuration.manage", "commerce.inventory.item.create", "commerce.inventory.item.list", "commerce.inventory.item.update", "commerce.inventory.item.view"] },
+        RoleDefinition { code: "viewer", name: "viewer", description: "Walkthrough fixture role", grant_all: false, capabilities: &["factory.inventory.configuration.view", "commerce.inventory.item.list", "commerce.inventory.item.view"] },
     ],
     system_principals: &[],
 }) }
@@ -80,7 +83,14 @@ async fn main() -> Result<(), Error> {
         .get(0);
     client
         .batch_execute(
-            "DELETE FROM factory_inventory_units; DELETE FROM factory_inventory_locations;
+            // Conversion versions are append-only; only this disposable reset
+            // lifts the trigger to start again.
+            "ALTER TABLE factory_inventory_unit_conversions DISABLE TRIGGER factory_inventory_unit_conversions_append_only;
+             DELETE FROM factory_inventory_unit_conversions;
+             ALTER TABLE factory_inventory_unit_conversions ENABLE TRIGGER factory_inventory_unit_conversions_append_only;
+             DELETE FROM factory_inventory_materials; DELETE FROM commerce_inventory_items;
+             DELETE FROM factory_inventory_material_types;
+             DELETE FROM factory_inventory_units; DELETE FROM factory_inventory_locations;
              DELETE FROM base_settings WHERE key LIKE 'factory.inventory.%';
              UPDATE companies SET status='active' WHERE tenant_id=1 AND id=3",
         )
@@ -285,6 +295,477 @@ async fn main() -> Result<(), Error> {
     );
     show("list", inventory.list_locations(&manager, 1, None).await);
 
+    println!("== items (company 1 statuses: draft, active, retired; no default currency)");
+    show(
+        "create with the default status",
+        inventory
+            .create_item(
+                &manager,
+                1,
+                &NewItem {
+                    sku: " sheet-001 ".into(),
+                    title: "Sheet stock".into(),
+                    currency_code: Some("myr".into()),
+                    storage_location: Some("  ".into()),
+                    ..NewItem::default()
+                },
+            )
+            .await,
+    );
+    refused(
+        "duplicate SKU, other case",
+        inventory
+            .create_item(
+                &manager,
+                1,
+                &NewItem {
+                    sku: "Sheet-001".into(),
+                    title: "Again".into(),
+                    currency_code: Some("MYR".into()),
+                    ..NewItem::default()
+                },
+            )
+            .await,
+    );
+    refused(
+        "status outside the vocabulary, no currency, negative quantity",
+        inventory
+            .create_item(
+                &manager,
+                1,
+                &NewItem {
+                    sku: "x-1".into(),
+                    title: "X".into(),
+                    status: Some("archived".into()),
+                    quantity_on_hand: Some(-1),
+                    ..NewItem::default()
+                },
+            )
+            .await,
+    );
+    refused(
+        "company 2 has no vocabulary, so a status is required",
+        inventory
+            .create_item(
+                &manager,
+                2,
+                &NewItem {
+                    sku: "x-1".into(),
+                    title: "X".into(),
+                    currency_code: Some("MYR".into()),
+                    ..NewItem::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "by SKU, lower case",
+        inventory.get_item_by_sku(&manager, 1, "sheet-001").await,
+    );
+    show(
+        "list status active",
+        inventory
+            .list_items(&manager, 1, Some("active"), None)
+            .await
+            .map(|items| items.len()),
+    );
+
+    println!("== material types");
+    let definitions = vec![
+        PropertyDefinition {
+            key: "width".into(),
+            label: " Width ".into(),
+            value_type: "decimal".into(),
+            unit: Some("mm".into()),
+            required: true,
+        },
+        PropertyDefinition {
+            key: "grade".into(),
+            label: "Grade".into(),
+            value_type: "string".into(),
+            unit: None,
+            required: false,
+        },
+    ];
+    let sheet_type = inventory
+        .create_material_type(
+            &manager,
+            1,
+            &NewMaterialType {
+                code: " type-a ".into(),
+                name: "Type A".into(),
+                property_definitions: definitions.clone(),
+            },
+        )
+        .await;
+    show("create", &sheet_type);
+    let sheet_type = sheet_type?.id;
+    refused(
+        "duplicate key",
+        inventory
+            .create_material_type(
+                &manager,
+                1,
+                &NewMaterialType {
+                    code: "type-b".into(),
+                    name: "Type B".into(),
+                    property_definitions: vec![definitions[1].clone(), definitions[1].clone()],
+                },
+            )
+            .await,
+    );
+    refused(
+        "unit on a string property",
+        inventory
+            .create_material_type(
+                &manager,
+                1,
+                &NewMaterialType {
+                    code: "type-b".into(),
+                    name: "Type B".into(),
+                    property_definitions: vec![PropertyDefinition {
+                        unit: Some("mm".into()),
+                        ..definitions[1].clone()
+                    }],
+                },
+            )
+            .await,
+    );
+    refused(
+        "taken code",
+        inventory
+            .create_material_type(
+                &manager,
+                1,
+                &NewMaterialType {
+                    code: "TYPE-A".into(),
+                    name: "Again".into(),
+                    property_definitions: Vec::new(),
+                },
+            )
+            .await,
+    );
+    let spare_type = inventory
+        .create_material_type(
+            &manager,
+            1,
+            &NewMaterialType {
+                code: "type-c".into(),
+                name: "Type C".into(),
+                property_definitions: Vec::new(),
+            },
+        )
+        .await?
+        .id;
+    show(
+        "retire type C",
+        inventory
+            .retire_material_type(&manager, 1, spare_type)
+            .await,
+    );
+    refused(
+        "edit a retired type",
+        inventory
+            .update_material_type(
+                &manager,
+                1,
+                spare_type,
+                &MaterialTypeUpdate {
+                    name: Some("Again".into()),
+                    ..MaterialTypeUpdate::default()
+                },
+            )
+            .await,
+    );
+
+    println!("== materials");
+    let kg = units
+        .iter()
+        .find(|u| u.code == "kg")
+        .map(|u| u.id)
+        .unwrap_or_default();
+    let g = units
+        .iter()
+        .find(|u| u.code == "g")
+        .map(|u| u.id)
+        .unwrap_or_default();
+    let values = |pairs: &[(&str, Value)]| -> Map<String, Value> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), value.clone()))
+            .collect()
+    };
+    let typed = |properties| MaterialTyping {
+        material_type_id: Some(sheet_type),
+        properties,
+    };
+    let new_item = |sku: &str| NewItem {
+        sku: sku.into(),
+        title: format!("Material {sku}"),
+        currency_code: Some("MYR".into()),
+        ..NewItem::default()
+    };
+    show(
+        "create with a type and values",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-1"),
+                kg,
+                &typed(values(&[
+                    ("width", Value::from("1200.50")),
+                    ("grade", Value::from(" B ")),
+                ])),
+            )
+            .await,
+    );
+    refused(
+        "missing required value (and the item is not created)",
+        inventory
+            .create_material(&manager, 1, &new_item("mat-2"), kg, &typed(Map::new()))
+            .await,
+    );
+    show(
+        "item mat-2 after the refusal",
+        inventory.get_item_by_sku(&manager, 1, "mat-2").await,
+    );
+    refused(
+        "undefined key",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-2"),
+                kg,
+                &typed(values(&[
+                    ("width", Value::from(5)),
+                    ("colour", Value::from("x")),
+                ])),
+            )
+            .await,
+    );
+    refused(
+        "wrong value type",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-2"),
+                kg,
+                &typed(values(&[("width", Value::from(true))])),
+            )
+            .await,
+    );
+    refused(
+        "values without a type",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-2"),
+                kg,
+                &MaterialTyping {
+                    material_type_id: None,
+                    properties: values(&[("width", Value::from(5))]),
+                },
+            )
+            .await,
+    );
+    refused(
+        "a retired type",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-2"),
+                kg,
+                &MaterialTyping {
+                    material_type_id: Some(spare_type),
+                    properties: Map::new(),
+                },
+            )
+            .await,
+    );
+    refused(
+        "a retired native unit",
+        inventory
+            .create_material(
+                &manager,
+                1,
+                &new_item("mat-2"),
+                pcs,
+                &MaterialTyping::default(),
+            )
+            .await,
+    );
+    let sheet = inventory
+        .get_item_by_sku(&manager, 1, "SHEET-001")
+        .await?
+        .id;
+    show(
+        "register an existing item without a type",
+        inventory
+            .register_material(&manager, 1, sheet, g, &MaterialTyping::default())
+            .await,
+    );
+    refused(
+        "register it twice",
+        inventory
+            .register_material(&manager, 1, sheet, kg, &MaterialTyping::default())
+            .await,
+    );
+    let mat = inventory.get_item_by_sku(&manager, 1, "MAT-1").await?.id;
+    show(
+        "update details and values",
+        inventory
+            .update_material(
+                &manager,
+                1,
+                mat,
+                &ItemUpdate {
+                    title: Some("Material one".into()),
+                    status: Some("active".into()),
+                    notes: Some("Checked".into()),
+                    ..ItemUpdate::default()
+                },
+                &values(&[("width", Value::from(1250))]),
+            )
+            .await,
+    );
+    refused(
+        "update with a status outside the vocabulary",
+        inventory
+            .update_material(
+                &manager,
+                1,
+                mat,
+                &ItemUpdate {
+                    status: Some("gone".into()),
+                    ..ItemUpdate::default()
+                },
+                &values(&[("width", Value::from(1250))]),
+            )
+            .await,
+    );
+    refused(
+        "change definitions of a type in use",
+        inventory
+            .update_material_type(
+                &manager,
+                1,
+                sheet_type,
+                &MaterialTypeUpdate {
+                    property_definitions: Some(definitions[..1].to_vec()),
+                    ..MaterialTypeUpdate::default()
+                },
+            )
+            .await,
+    );
+    show(
+        "rename a type in use",
+        inventory
+            .update_material_type(
+                &manager,
+                1,
+                sheet_type,
+                &MaterialTypeUpdate {
+                    code: Some("type-a2".into()),
+                    name: Some("Type A, renamed".into()),
+                    ..MaterialTypeUpdate::default()
+                },
+            )
+            .await,
+    );
+    refused(
+        "retire kg, an active material's native unit",
+        inventory.retire_unit(&manager, 1, kg).await,
+    );
+    show("list", inventory.list_materials(&manager, 1, None).await);
+
+    println!("== conversions (mat-1, native kg)");
+    for factor in ["0.001", "0.0010"] {
+        show(
+            &format!("g at {factor}"),
+            inventory
+                .define_conversion(&manager, 1, mat, g, factor.parse::<Decimal>()?)
+                .await,
+        );
+    }
+    refused(
+        "the native unit",
+        inventory
+            .define_conversion(&manager, 1, mat, kg, Decimal::ONE)
+            .await,
+    );
+    refused(
+        "a retired unit",
+        inventory
+            .define_conversion(&manager, 1, mat, pcs, Decimal::ONE)
+            .await,
+    );
+    for factor in ["0", "0.0000000000001", "1000000000000"] {
+        refused(
+            &format!("factor {factor}"),
+            inventory
+                .define_conversion(&manager, 1, mat, g, factor.parse::<Decimal>()?)
+                .await,
+        );
+    }
+    show(
+        "every version",
+        inventory.list_conversions(&manager, 1, mat).await,
+    );
+    show(
+        "current",
+        inventory.get_conversion(&manager, 1, mat, g, None).await,
+    );
+    show(
+        "version 1",
+        inventory.get_conversion(&manager, 1, mat, g, Some(1)).await,
+    );
+    refused(
+        "version 9",
+        inventory.get_conversion(&manager, 1, mat, g, Some(9)).await,
+    );
+    refused(
+        "conversions of an item that is not a material",
+        inventory
+            .list_conversions(
+                &manager,
+                1,
+                inventory
+                    .create_item(&manager, 1, &new_item("plain"))
+                    .await?
+                    .id,
+            )
+            .await,
+    );
+
+    println!("== retirement");
+    show(
+        "retire mat-1",
+        inventory.retire_material(&manager, 1, mat).await,
+    );
+    refused(
+        "retire it twice",
+        inventory.retire_material(&manager, 1, mat).await,
+    );
+    refused(
+        "update a retired material",
+        inventory
+            .update_material(&manager, 1, mat, &ItemUpdate::default(), &Map::new())
+            .await,
+    );
+    show(
+        "retire kg once its only material is retired",
+        inventory.retire_unit(&manager, 1, kg).await,
+    );
+    refused(
+        "a company 1 material read through company 2",
+        inventory.get_material(&manager, 2, mat).await,
+    );
+
     println!("== who may do what");
     show(
         "viewer lists units",
@@ -311,6 +792,33 @@ async fn main() -> Result<(), Error> {
         inventory
             .configure_item_settings(&viewer, 1, &ItemSettings::default())
             .await,
+    );
+    show(
+        "viewer lists items",
+        inventory
+            .list_items(&viewer, 1, None, None)
+            .await
+            .map(|items| items.len()),
+    );
+    refused(
+        "viewer creates an item",
+        inventory
+            .create_item(&viewer, 1, &new_item("viewer-1"))
+            .await,
+    );
+    refused(
+        "viewer creates a material type",
+        inventory
+            .create_material_type(&viewer, 1, &NewMaterialType::default())
+            .await,
+    );
+    refused(
+        "staff (no capability) lists materials",
+        inventory.list_materials(&staff, 1, None).await,
+    );
+    refused(
+        "other tenant reads company 1 items",
+        inventory.list_items(&other, 1, None, None).await,
     );
     refused(
         "staff (no capability) lists",
@@ -366,13 +874,24 @@ async fn main() -> Result<(), Error> {
         "INSERT INTO factory_inventory_units(tenant_id,company_id,code,name) VALUES(1,1,' padded','x')",
         "INSERT INTO factory_inventory_units(tenant_id,company_id,code,name) VALUES(2,1,'t','x')",
         "INSERT INTO factory_inventory_locations(tenant_id,company_id,code,name) VALUES(1,1,'lower','x')",
+        "UPDATE commerce_inventory_items SET sku='OTHER' WHERE sku='MAT-1' AND company_id=1",
+        "INSERT INTO commerce_inventory_items(tenant_id,company_id,sku,status,title,quantity_on_hand,currency_code) VALUES(1,1,'lower','draft','x',1,'myr')",
+        "UPDATE factory_inventory_materials SET native_unit_id=native_unit_id+1 WHERE company_id=1",
+        "UPDATE factory_inventory_materials SET retired_at=NULL WHERE company_id=1 AND retired_at IS NOT NULL",
+        "UPDATE factory_inventory_material_types SET retired_at=NULL WHERE company_id=1 AND retired_at IS NOT NULL",
+        "UPDATE factory_inventory_materials SET properties='{\"width\":1}' WHERE company_id=1 AND material_type_id IS NULL",
+        "INSERT INTO factory_inventory_materials(tenant_id,company_id,item_id,native_unit_id) SELECT 1,2,i.id,u.id FROM commerce_inventory_items i, factory_inventory_units u WHERE i.company_id=1 AND i.sku='PLAIN' AND u.company_id=2 LIMIT 1",
+        "UPDATE factory_inventory_unit_conversions SET factor=2",
+        "DELETE FROM factory_inventory_unit_conversions",
+        "TRUNCATE factory_inventory_unit_conversions",
+        "INSERT INTO factory_inventory_unit_conversions(tenant_id,company_id,material_id,unit_id,version,factor) SELECT 1,1,m.id,m.native_unit_id,99,1 FROM factory_inventory_materials m WHERE m.company_id=1 LIMIT 1",
     ] {
         refused(sql, client.execute(sql, &[]).await);
     }
     println!("== the audited changes");
     for row in client
         .query(
-            "SELECT auditable_type,auditable_id,event,actor_id,new_values::text FROM base_audit_mutations WHERE id > $1 AND (auditable_type LIKE 'factory_inventory_%' OR auditable_type = 'base/settings') ORDER BY id",
+            "SELECT auditable_type,auditable_id,event,actor_id,new_values::text FROM base_audit_mutations WHERE id > $1 AND (auditable_type LIKE 'factory_inventory_%' OR auditable_type IN ('base/settings','commerce_inventory_items')) ORDER BY id",
             &[&audited_before],
         )
         .await?

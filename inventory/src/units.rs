@@ -68,19 +68,20 @@ pub(crate) async fn get(
     unit_id: i64,
 ) -> Result<Unit, Error> {
     readable(client, scope, company_id).await?;
-    fetch(client, scope, company_id, unit_id, false).await
+    fetch(client, scope, company_id, unit_id, "").await
 }
 
-async fn fetch(
+/// Reads a unit, optionally with a row lock (`FOR SHARE` while a material or
+/// conversion takes it, `FOR UPDATE` while it changes).
+pub(crate) async fn fetch(
     client: &impl GenericClient,
     scope: &Scope,
     company_id: i64,
     unit_id: i64,
-    lock: bool,
+    lock: &str,
 ) -> Result<Unit, Error> {
     let sql = format!(
-        "SELECT {COLUMNS} FROM factory_inventory_units WHERE tenant_id=$1 AND company_id=$2 AND id=$3{}",
-        if lock { " FOR UPDATE" } else { "" }
+        "SELECT {COLUMNS} FROM factory_inventory_units WHERE tenant_id=$1 AND company_id=$2 AND id=$3 {lock}"
     );
     client
         .query_opt(&sql, &[&scope.tenant(), &company_id, &unit_id])
@@ -169,7 +170,7 @@ pub(crate) async fn rename(
     name: &str,
 ) -> Result<Unit, Error> {
     writable(tx.sql(), scope, company_id).await?;
-    let before = fetch(tx.sql(), scope, company_id, unit_id, true).await?;
+    let before = fetch(tx.sql(), scope, company_id, unit_id, "FOR UPDATE").await?;
     if before.retired {
         return Err(Error::UnitRetired);
     }
@@ -196,11 +197,8 @@ pub(crate) async fn rename(
         .await?)
 }
 
-/// Retires a unit while preserving its id in conversions and postings.
-///
-/// TODO(XI1): refuse `unit_in_use` ("Unit in use") while an active material
-/// names the unit as its native unit; materials arrive with XI1, in this
-/// module, and the guard belongs here beside the retirement.
+/// Retires a unit while preserving its id in conversions and postings. A
+/// unit that is an active material's native unit is refused as in use.
 pub(crate) async fn retire(
     tx: &mut MutationTransaction<'_>,
     scope: &Scope,
@@ -208,9 +206,20 @@ pub(crate) async fn retire(
     unit_id: i64,
 ) -> Result<Unit, Error> {
     writable(tx.sql(), scope, company_id).await?;
-    let before = fetch(tx.sql(), scope, company_id, unit_id, true).await?;
+    let before = fetch(tx.sql(), scope, company_id, unit_id, "FOR UPDATE").await?;
     if before.retired {
         return Err(Error::UnitRetired);
+    }
+    if tx
+        .sql()
+        .query_opt(
+            "SELECT 1 FROM factory_inventory_materials WHERE company_id=$1 AND native_unit_id=$2 AND retired_at IS NULL LIMIT 1",
+            &[&company_id, &unit_id],
+        )
+        .await?
+        .is_some()
+    {
+        return Err(Error::UnitInUse);
     }
     Ok(tx
         .mutate(move |sql| {

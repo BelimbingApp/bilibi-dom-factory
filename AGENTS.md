@@ -52,6 +52,11 @@ confirmations verbatim.
   appears in identifiers, schema constants, inclusion lists or defaults, and a
   fixture carries one only as data. Read item statuses and the default currency
   through `Inventory::item_settings`, never from a constant.
+- For a property a company defines on its types, use `PropertyDefinition`
+  and `property::validate` in `inventory/src/property.rs` and store the
+  validated values on the typed row, as materials do; do not add a typed
+  column or a second validator for one property, because the definitions are
+  the company's and one mechanism keeps them behaving alike.
 - Do not hard-code what an operator could set (limits, scopes, codes,
   vocabularies): declare a Base setting with an editor, as `contributions.rs`
   does for `factory.inventory.item_statuses`.

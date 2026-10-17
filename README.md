@@ -9,7 +9,7 @@ with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
-| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (slice X0); catalog, ledger, genealogy and pages follow |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); the item catalog: items, material types, materials and conversions (XI1); ledger, genealogy and pages follow |
 | `product_definition/` | `factory/product_definition` | `bilibi-factory-product-definition` | not yet ported |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 

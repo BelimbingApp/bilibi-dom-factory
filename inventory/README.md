@@ -1,11 +1,13 @@
 # factory/inventory
 
 Factory Inventory (`bilibi-factory-inventory`), ported from Bilimbi's
-`Bilimbi.Factory.Inventory`. This slice (X0) holds the module's descriptor,
-vocabulary, menu and settings, and the units, stock locations and item
-settings behind one facade. The item catalog, material types, the Material
-Transaction ledger, genealogy, production posting authority and the pages
-follow in slices XI1 to XI4.
+`Bilimbi.Factory.Inventory`. It holds the module's descriptor, vocabulary,
+menu and settings (slice X0), and behind one facade the units, stock
+locations and item settings (X0) and the item catalog: the item master,
+material types with property definitions, materials with a fixed native unit
+and immutable conversion versions (XI1). The Material Transaction ledger,
+genealogy, production posting authority and the pages follow in slices XI2 to
+XI4.
 
 ## Owner contract
 
@@ -21,6 +23,18 @@ and a company ID; the company must be live and inside the scope's tenant.
 | `create_unit`, `rename_unit`, `retire_unit` | `…configuration.manage` | a code is unique per company and stable; a retired unit takes no rename or second retirement |
 | `list_locations`, `get_location` | `…configuration.view` | ordered by code |
 | `create_location` | `…configuration.manage` | the code is trimmed and upper-cased |
+| `list_items` | `commerce.inventory.item.list` | ordered by SKU, optionally of one status |
+| `get_item`, `get_item_by_sku` | `commerce.inventory.item.view` | a SKU is looked up trimmed and upper-cased |
+| `create_item` | `commerce.inventory.item.create` | Belimbing's create rules and the company's item settings (below) |
+| `list_material_types`, `get_material_type` | `…configuration.view` | ordered by code |
+| `create_material_type`, `update_material_type`, `retire_material_type` | `…configuration.manage` | code upper-cased and unique per company; definitions fixed once a material uses the type |
+| `list_materials`, `get_material` | `…configuration.view` | by item; listed by SKU |
+| `register_material` | `…configuration.manage` | an existing item, once, in an active native unit, with an optional active type and its values |
+| `create_material` | `…configuration.manage` and `commerce.inventory.item.create` | the item and its material in one write |
+| `update_material` | `…configuration.manage` and `commerce.inventory.item.update` | the item's title, description, status, notes and currency, and the values for its type, replaced whole |
+| `retire_material` | `…configuration.manage` | keeps its history readable |
+| `define_conversion` | `…configuration.manage` | the next version of one unit's factor to the native unit |
+| `list_conversions`, `get_conversion` | `…configuration.view` | every version by unit code then version; the current one, or a named version |
 
 A write also needs the company as an authorized target (the actor's own
 company, or `admin.company.tenant-wide.manage`) and a company that is not
@@ -28,7 +42,45 @@ archived; it runs in one `MutationBoundary` transaction, so each change is
 audited under its table name, and the capability is checked again inside the
 transaction. A record of another company is reported as not found. Failures are
 `Error`: its texts are Bilimbi's ("Unit not found", "Code has already been
-taken", "Invalid item statuses").
+taken", "Invalid item statuses", "Material type in use").
+
+## Catalog rules
+
+- **Item master.** `commerce_inventory_items` keeps Belimbing's columns and
+  table name. On create the SKU and currency are trimmed and upper-cased, a
+  blank storage location is none, and the quantity on hand defaults to one
+  (0 to 999999). An omitted status is the configured vocabulary's first entry
+  and any other must be in it; unconfigured, a non-blank status is required.
+  An omitted currency is the configured default; unconfigured, it is
+  required. The SKU never changes. `category_id` and `product_template_id`
+  are opaque references to a Commerce Catalog Inventory does not own, read
+  but never written. `quantity_on_hand` and `storage_location` are the item
+  master's own values, never stock positions.
+- **Material types.** A definition is `PropertyDefinition { key, label,
+  value_type, unit, required }`: a key `[a-z][a-z0-9_]{0,63}` unique in the
+  type, a label of at most 255 characters, a value type from `VALUE_TYPES`
+  (`string`, `integer`, `decimal`, `boolean`), and a unit label (at most 32)
+  only on a numeric type; anything else is "Invalid property definitions".
+  Definitions may change until a material uses the type ("Material type in
+  use"); the code and name may change later too. Which types exist is the
+  company's configuration.
+- **Material identity.** An item becomes a material once ("Item has already
+  been taken"), in a native unit that never changes. A material may take an
+  active type and values for its definitions: no undefined key, every
+  required key present, each value of its type (a string trimmed, at most
+  1000 characters; a decimal from a JSON integer or decimal string, kept at
+  the precision given), else "Invalid properties". A material without a type
+  holds none.
+- **Conversions.** One conversion unit equals `factor` native units, a
+  positive decimal with at most 12 decimal places and 12 integer digits. A
+  version never changes; defining a factor again is the next version, and the
+  native unit or a retired unit takes none ("Native unit", "Unit retired").
+- **Retirement.** Retiring keeps every reference readable. A retired unit
+  takes no new material or conversion, and a unit that is an active
+  material's native unit cannot retire ("Unit in use"). A retired type takes
+  no edit and no new material. A retired material takes no update and will
+  refuse new postings; retiring one that holds stock is refused once the
+  ledger arrives (XI2).
 
 ## Capabilities
 
@@ -36,7 +88,12 @@ Seven keys, verbatim from Bilimbi, all granted to `tenant_owner`: the five
 `commerce.inventory.item.*` keys are Belimbing's durable item master keys
 (`create`, `list`, `update`, `view`, plus `commerce.inventory.manage`); the
 other two are `factory.inventory.configuration.view` and `.manage`. The item
-keys gate the item catalog that XI1 adds.
+keys gate the item master; configuration gates units, locations, settings,
+material types, materials and conversions, and a write that touches both
+needs both. Bilimbi's facade checks no capability (its pages check
+configuration only), so these facade checks are the Rust port's.
+`commerce.inventory.manage` is declared for grants in adopted databases and
+gates nothing yet.
 
 ## Settings
 
@@ -61,5 +118,15 @@ those two links have no page behind them.
 Migration `factory-inventory-001-units-locations`: `factory_inventory_units`
 (with retirement) and `factory_inventory_locations`, each keyed to a company of
 the row's tenant, with a unique code per company. A row keeps its company and
-code for good, and a retired unit stays retired, enforced by trigger. Money and
-quantity columns arrive with the ledger.
+code for good, and a retired unit stays retired, enforced by trigger.
+
+Migration `factory-inventory-002-catalog`: `commerce_inventory_items`,
+`factory_inventory_material_types`, `factory_inventory_materials` and
+`factory_inventory_unit_conversions`. Every reference is composite with
+`company_id`, so a row only names records of its own company. Triggers keep an
+item's company and SKU, a material's item, native unit and type, and keep
+anything retired retired; a check keeps a material without a type free of
+values. Conversion rows are append-only (UPDATE, DELETE and TRUNCATE are
+refused) and never name the material's native unit. The adopted Belimbing
+defaults for status (`draft`) and currency are not carried: both come from
+the company's settings or the request.
