@@ -3,9 +3,8 @@
 //! the company zone for entry (as Bilimbi does), UTC mode uses UTC. A fold
 //! chooses its first instant; a gap is refused instead of silently moved.
 //!
-//! XP4's labour panel consumes this XP3 foundation. The runnable floor-pages
+//! The labour panel consumes this contract. The runnable floor-pages
 //! walkthrough includes this exact private source to prove entry conversions.
-#![allow(dead_code)]
 use bilibi_datetime::{DisplayContext, Mode};
 use jiff::{
     civil::DateTime,

@@ -10,7 +10,7 @@ use bilibi_ui::{
 use serde_json::Value;
 
 impl Floor {
-    fn card(&self, id: &str, title: &str, body: Html) -> Result<Html> {
+    pub(super) fn card(&self, id: &str, title: &str, body: Html) -> Result<Html> {
         s::render(Card {
             id,
             title,
@@ -137,6 +137,9 @@ impl Floor {
                 }
             }
         }
+        if self.order.is_some() {
+            body.push(&self.labour_panel()?);
+        }
         let error = match &self.error {
             Some(error) => s::render(Alert {
                 kind: StatusKind::Error,
@@ -154,7 +157,7 @@ impl Floor {
             .as_str()
             .to_string())
     }
-    fn instant(&self, id: &str, at: jiff::Timestamp) -> Result<Html> {
+    pub(super) fn instant(&self, id: &str, at: jiff::Timestamp) -> Result<Html> {
         s::render(s::InstantView {
             id,
             value: {
@@ -169,7 +172,7 @@ impl Floor {
             },
         })
     }
-    fn time_cell(&self, v: &Value, key: &str) -> Result<Cell> {
+    pub(super) fn time_cell(&self, v: &Value, key: &str) -> Result<Cell> {
         let at = s::text(v, key)
             .parse::<jiff::Timestamp>()
             .map_err(|_| Error::Invalid)?;
@@ -196,7 +199,7 @@ impl Floor {
             .map(|r| Choice::new(s::text(r, "label"), r["id"].to_string()))
             .collect()
     }
-    fn choices(
+    pub(super) fn choices(
         &self,
         values: &[Value],
         legend: &str,
@@ -590,7 +593,11 @@ impl Floor {
         )
     }
 }
-fn hidden(form: &str, key: &str, d: &std::collections::HashMap<String, String>) -> Field {
+pub(super) fn hidden(
+    form: &str,
+    key: &str,
+    d: &std::collections::HashMap<String, String>,
+) -> Field {
     s::field(form, key, "", d).kind(InputKind::Hidden)
 }
 fn numeric(mut field: Field, mode: &str) -> Field {
@@ -609,7 +616,7 @@ fn quantity(value: &str) -> &str {
         value
     }
 }
-fn table(
+pub(super) fn table(
     id: &str,
     event: &str,
     caption: &str,

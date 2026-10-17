@@ -1,0 +1,8 @@
+{# Bilimbi CodeList/MeasurementTypesLive; all elements use Platform components. #}
+{% import "components.html" as ui %}
+{% import "feedback.html" as feedback %}
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(variant=bilibi_ui::PageVariant::List) %}
+{% call ui::header(subtitle=subtitle,actions=actions) %}{{ title }}{% endcall %}
+{{ error }}{{ withheld }}{{ editor }}{{ list }}
+{% endcall %}

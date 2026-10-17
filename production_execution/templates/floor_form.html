@@ -5,7 +5,11 @@
 {{ choices }}
 {% for field in after %}{% call form::input(field=field) %}{% endcall %}{% endfor %}
 <div class="flex gap-3">
+{% if event == "clock_in" %}
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary,button_type="submit",class="min-h-14 px-6 text-base w-full",working="Clocking in…") %}{{ submit }}{% endcall %}
+{% else %}
 {% call ui::button(variant=bilibi_ui::ButtonVariant::Primary,button_type="submit",class="min-h-14 px-6 text-base w-full",working="Recording…") %}{{ submit }}{% endcall %}
+{% endif %}
 {% if !cancel.is_empty() %}{% call ui::button(button_type="button",event=cancel,class="min-h-14 px-6 text-base") %}Cancel{% endcall %}{% endif %}
 </div>
 </form>

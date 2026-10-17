@@ -21,6 +21,7 @@ pub(super) struct Line {
 }
 pub(super) struct Floor {
     pub(super) pages: Pages,
+    pub(super) labour: super::labour::Labour,
     pub(super) orders: Vec<Order>,
     pub(super) order: Option<Order>,
     pub(super) runs: Vec<Execution>,
@@ -58,6 +59,7 @@ impl Floor {
         };
         Ok(Self {
             pages: pages.clone(),
+            labour: super::labour::Labour::new()?,
             orders: vec![],
             order: None,
             runs: vec![],
@@ -143,6 +145,7 @@ impl Floor {
         self.measure_correction = None;
         self.order = None;
         self.run = None;
+        self.labour.reset_drafts();
         self.runs.clear();
         self.clear_run();
         let Ok(company) = s::company(scope) else {
@@ -180,6 +183,8 @@ impl Floor {
             caps::WASTAGE_CORRECT,
             caps::MEASUREMENT_RECORD,
             caps::MEASUREMENT_CORRECT,
+            caps::LABOUR_RECORD,
+            caps::LABOUR_MANAGE,
         ] {
             if s::can(&self.pages.db, scope, cap).await? {
                 self.allowed.insert(cap);
@@ -225,6 +230,7 @@ impl Floor {
                 }
             }
         }
+        self.load_labour(scope, company).await?;
         self.load_run(scope, company).await
     }
     async fn load_run(&mut self, scope: &Scope, company: i64) -> Result<()> {
@@ -328,6 +334,9 @@ impl Floor {
     }
     pub(super) async fn event(&mut self, scope: &Scope, p: &Value) -> Result<()> {
         self.success = None;
+        if self.labour_event(scope, p).await? {
+            return Ok(());
+        }
         let kind = s::text(p, "type");
         match kind {
             "wastage_grid" => {

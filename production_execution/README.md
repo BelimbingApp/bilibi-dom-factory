@@ -3,7 +3,7 @@
 `ProductionExecution` owns production orders, completed operation executions,
 material hold overrides and shop-floor capture. Resolve `SERVICE`
 (`factory/production_execution.production_execution`) from the service
-registry. XP1 and XP2 are implemented; pages and menu entries follow in XP3/XP4. It mirrors
+registry. Orders, capture and the shop-floor/configuration pages are implemented. It mirrors
 Bilimbi `ProductionExecution` at `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 
 ## Facade
@@ -144,14 +144,21 @@ The XP2 executable checks code normalization/immutability/deactivation, wastage 
 
 ## Shop floor
 
-`/factory/floor` (Production → Shop floor) requires `factory.production-execution.floor.view`. Pick an order, then a run; the `order` and `run` query parameters restore the selection. XP3 renders native-unit run yield, wastage and output measurements with their correction chains and range flags. Recording and correcting are separate grants, rechecked by every write-shaped event and again by the facade. Draft request IDs survive validation refusals and duplicate submissions. The labour panel and configuration pages are delivered by XP4.
+`/factory/floor` (Production → Shop floor) requires `factory.production-execution.floor.view`. Pick an order, then a run; the `order` and `run` query parameters restore the selection. XP3 renders native-unit run yield, wastage and output measurements with their correction chains and range flags. Recording and correcting are separate grants, rechecked by every write-shaped event and again by the facade. Draft request IDs survive validation refusals and duplicate submissions. Labour is available on the selected order before or after selecting a run: clock in/out, closed-time totals per run, supervisor worker selection, finished entries and correction chains. `labour.record` controls own clocks and `labour.manage` controls other workers, finished entries and corrections.
 
 
-Timestamps use Base Datetime's display policy and shared timestamp component. `src/web/time.rs` is the private company-time entry contract for XP4: company/local display reads entered wall time in the company zone; UTC display reads UTC. A daylight-saving gap is refused and a fold picks the earlier instant. An unchanged minute input keeps the original seconds and subsecond precision.
+Timestamps use Base Datetime's display policy and shared timestamp component. `src/web/time.rs` is the private company-time entry contract: company/local display reads entered wall time in the company zone; UTC display reads UTC. A daylight-saving gap is refused and a fold picks the earlier instant. An unchanged minute input keeps the original seconds and subsecond precision.
 
 ### Page proof
 
 On a disposable migrated database, run the existing `production-execution` and `shop-floor` walkthrough binaries, then `floor-pages` from `fixtures/walkthrough` with the same `BILIBI_FACTORY_FIXTURE=disposable`, `DATABASE_URL`, and Platform `CARGO_TARGET_DIR`. It drives the registered PageService and real facade mutations (selection, range flags, both corrections, retry, stale permission and archived company refusals), plus the same company-time source. `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35593 BIND_ADDR=127.0.0.1:35593` keeps the composed app running for browser proof after the checks. No fixture data is a product seed.
+
+
+### Configuration pages
+
+`/factory/wastage-reasons`, `/factory/labour-roles` and `/factory/measurement-types` sit under Factory administration and require `configuration.view`. They share the private `src/web/codes.rs` adapter with FlexTable/ListColumns, new/edit forms and activate/deactivate actions. Every write-shaped event rechecks `configuration.manage`; the facade checks again in its mutation. Code, measurement value type and unit stay fixed while labels and measurement limits can change. New limits affect new measurements only. Form submits are named `save_entry` because the Platform reserves `save` for Company edits.
+
+Run `labour-pages` after `floor-pages` on the same disposable database for XP4. It exercises the registered page adapter with real sessions: all three configuration create/edit/activation flows, immutable-field forgery, restricted/stale grants, own and supervisor clocks, retry, finished intervals in company time, corrections and recomputed totals, malformed time and archived company refusals. Set `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35594 BIND_ADDR=127.0.0.1:35594` to keep that app running for browser proof.
 
 ## Reviewed production operations (H6)
 
