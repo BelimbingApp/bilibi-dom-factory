@@ -25,6 +25,7 @@ path = "src/agent_operations.rs"
 [workspace]
 
 [dependencies]
+bilibi-agent-access = { path = "../../../../core/agent_access" }
 bilibi-agent-api = { path = "../../../../base/agent_api" }
 bilibi-authz = { path = "../../../../base/authz" }
 bilibi-database = { path = "../../../../base/database" }

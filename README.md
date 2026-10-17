@@ -101,7 +101,11 @@ consumption refused for insufficient stock, a review outrun by a later
 posting, a grant revoked between review and commit, a signed correction, the
 transaction, balance and genealogy reads, and another tenant's refusal. It
 checks each outcome and exits nonzero on an unexpected one; plan codes are
-never printed.
+never printed. With `BILIBI_FACTORY_API=http://127.0.0.1:3012` set and the
+composed app running against the same database (`BIND_ADDR=127.0.0.1:3012
+APP_ORIGIN=http://localhost:3012 bilibi-web run`), it ends by approving a real
+OAuth device grant and driving search, a refused direct write, a plan review,
+its commit and a refused replay through `/api/v1`.
 
 ## License
 
