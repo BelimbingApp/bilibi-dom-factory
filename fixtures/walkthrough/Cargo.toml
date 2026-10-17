@@ -48,3 +48,8 @@ axum = "0.8"
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7"
+
+# XP2 capture proof, run after production-execution on the same disposable DB.
+[[bin]]
+name = "shop-floor"
+path = "src/shop_floor.rs"
