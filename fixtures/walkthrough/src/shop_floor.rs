@@ -250,7 +250,7 @@ async fn main() -> Result<(), Error> {
     )?;
     let audit_before = counts(&c).await?;
     let mut optional = waste("xp2-waste", "2.000");
-    optional["note"] = Value::Null;
+    optional["note"] = json!(" capture ");
     optional["identity_id"] = json!(identity);
     verify(
         "wastage replay no new audit",
@@ -443,6 +443,12 @@ async fn main() -> Result<(), Error> {
     verify(
         "missing limits mean unknown not false",
         unconstrained["out_of_range"].is_null(),
+    )?;
+    let before_replay = counts(&c).await?;
+    let replay=pe.record_measurement(&manager,1,run,&json!({"request_id":"xp2-unbounded","measurement_type_id":id(&unbounded),"value":999,"note":null,"identity_id":null})).await?;
+    verify(
+        "omitted and explicit null normalize before replay",
+        id(&replay) == id(&unconstrained) && counts(&c).await? == before_replay,
     )?;
     let race =
         json!({"request_id":"xp2-measure-race","measurement_type_id":id(&unbounded),"value":7});

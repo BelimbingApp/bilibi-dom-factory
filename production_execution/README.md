@@ -8,9 +8,9 @@ Bilimbi `ProductionExecution` at `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 
 ## Facade
 
-Every read takes a sealed scope and company, requires
+Order and execution reads take a sealed scope and company, require
 `factory.production-execution.floor.view`, and checks the live company. Every
-write rechecks `factory.production-execution.configuration.manage` and the
+order/completion write rechecks `factory.production-execution.configuration.manage` and the
 authorized writable company inside `MutationBoundary`. `tenant_owner` holds
 `floor.view`, `configuration.view` and `configuration.manage`; an administrator
 grants `import` and `material-hold.override` explicitly, as in Bilimbi.
@@ -115,7 +115,7 @@ Wastage must name a stock item/identity in the run and uses its native unit. Its
 
 Measurements use Inventory's property-value validator and snapshot unit/limits/target. Values below minimum or above maximum flag out of range; endpoints are valid. Nonnumeric types or no bounds give null (target alone never flags). Corrections preserve original snapshots, including after deactivation. Non-null identity must name a positive stock output of the run.
 
-Every request ID is company-local within its capture table, nonblank and at most 240 bytes. SHA-256 fingerprints cover action, target and whitelisted caller intent, excluding generated times and recorder identity. Identical retries return existing evidence without a new audit action; conflicting content refuses. Corrections have one successor and may themselves be corrected, always with a reason. PostgreSQL refuses UPDATE/DELETE/TRUNCATE of wastage and measurements; labour permits only a one-time close. Every saved row returns a complete audit `Change`.
+Every request ID is company-local within its capture table, nonblank and at most 240 bytes. SHA-256 fingerprints cover action, target and the normalized command, including resolved correction defaults, excluding generated times and recorder identity. Retries revalidate configuration and worker eligibility, then return existing evidence without a new audit action; conflicting content refuses. Corrections have one successor and may themselves be corrected, always with a reason. PostgreSQL refuses UPDATE/DELETE/TRUNCATE of wastage and measurements; labour permits only a one-time close. Every saved row returns a complete audit `Change`.
 
 ## Traces and yield
 
