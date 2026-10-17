@@ -397,6 +397,12 @@ impl Floor {
                 &s::limits(ty),
             ));
         }
+        if !self.types.iter().any(|t| {
+            t["id"].as_i64()
+                == bilibi_ui::params::positive_id(Some(s::get(d, "measurement_type_id")))
+        }) {
+            after[0].hint = "Choose what was measured to enter its value.".into();
+        }
         after.push(s::field("measurement", "note", "Note (optional)", d));
         let choices = self.choices(
             &self.types,

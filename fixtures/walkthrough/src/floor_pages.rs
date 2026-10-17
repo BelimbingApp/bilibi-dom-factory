@@ -388,12 +388,14 @@ async fn main() -> Result<(), Error> {
     let body = event(
         &mut state,
         &manager,
-        json!({"type":"wastage_grid","action":"toggle"}),
+        json!({"type":"wastage_grid","op":"zoom_preset","preset":"compact"}),
     )
     .await?;
     verify(
         "column host retains both tables",
-        body.html.contains("wastage-table") && body.html.contains("measurements-table"),
+        body.html.contains("wastage-table")
+            && body.html.contains("measurements-table")
+            && body.html.contains("data-mode=\"compact\""),
     )?;
     for key in [
         "factory.production-execution.floor.view",
