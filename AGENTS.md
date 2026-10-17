@@ -96,6 +96,10 @@ confirmations verbatim.
   and previewing it in a rolled-back transaction. Do not write a second
   validator, direct write or production posting there: the preview must refuse
   exactly what the commit will, and an agent holds no `PostingAuthority`.
+- Name a page form's submit event for its action (`save_unit`), never `save`,
+  because `live.js` reserves that name and nests its values under `edit`; a
+  retirement waits on `ConfirmDialog`, never `data-confirm`, which the
+  Platform does not run.
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.

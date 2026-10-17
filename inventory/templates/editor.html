@@ -1,0 +1,7 @@
+{#- The inline editor form of a list page (Bilimbi's `<.form … class="space-y-4 p-4">`):
+    its controls, then Save and Cancel. The controls and buttons are rendered by
+    src/pages through the shared models. -#}
+<form id="{{ id }}" data-event="{{ event }}" class="space-y-4 p-4">
+{%- for field in fields %}{{ field|safe }}{% endfor %}
+<div class="flex gap-2">{{ save|safe }}{{ cancel|safe }}</div>
+</form>

@@ -38,6 +38,7 @@ mod materials;
 mod property;
 mod settings;
 mod units;
+mod web;
 
 pub use authority::{PostingAuthority, POSTING_AUTHORITIES};
 pub use balance::{Balance, BalanceConversion, CrossUnitBalance, UnitBalance};
@@ -862,7 +863,7 @@ inventory::submit! {
         layer: Layer::Domains,
         dependencies: &[
             "base/agent_api", "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
-            "base/settings", "base/tenancy", "core/company",
+            "base/settings", "base/tenancy", "base/ui", "core/company",
         ],
         migrations: &[
             (
@@ -897,6 +898,16 @@ inventory::submit! {
                 });
                 agent_operations::bind(inventory.clone())?;
                 Ok(inventory)
+            },
+        }, Service {
+            id: web::SERVICE,
+            factory: |services| {
+                Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(
+                    Arc::new(web::Pages {
+                        db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
+                        inventory: services.get(SERVICE)?,
+                    }),
+                )))
             },
         }],
     }
