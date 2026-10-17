@@ -1,0 +1,10 @@
+{% import "components.html" as ui %}
+{% import "forms.html" as form %}
+<form id="{{ id }}" data-event="{{ event }}"{% if !change.is_empty() %} data-change data-event="{{ change }}" data-submit-event="{{ event }}"{% endif %} class="space-y-4 p-4 [&_input]:min-h-14 [&_select]:min-h-14 [&_input]:text-lg [&_select]:text-lg">
+{% for field in fields %}{% call form::input(field=field) %}{% endcall %}{% endfor %}
+{{ choices }}
+<div class="flex gap-3">
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary,button_type="submit",class="min-h-14 px-6 text-base w-full",working="Recording…") %}{{ submit }}{% endcall %}
+{% if !cancel.is_empty() %}{% call ui::button(button_type="button",event=cancel,class="min-h-14 px-6 text-base") %}Cancel{% endcall %}{% endif %}
+</div>
+</form>

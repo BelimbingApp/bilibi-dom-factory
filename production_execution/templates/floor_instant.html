@@ -1,0 +1,2 @@
+{% import "flex_table.html" as flex %}
+<time id="{{ id }}" datetime="{{ value.iso }}" data-hook="DateTime" data-mode="{{ value.mode.as_str() }}" data-format="datetime" data-precision="minute" data-text-company="{{ value.company }}" data-text-utc="{{ value.utc }}">{{ value.text }}</time>

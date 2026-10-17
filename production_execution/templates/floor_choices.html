@@ -1,0 +1,6 @@
+{% import "components.html" as ui %}
+<fieldset>
+<legend class="mb-2 text-sm font-semibold">{{ legend }}</legend>
+<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">{{ buttons }}</div>
+{% if buttons.is_empty() %}<p class="text-sm text-ink-muted">{{ empty }}</p>{% endif %}
+</fieldset>

@@ -1,0 +1,9 @@
+{# Bilimbi ProductionExecution.Web.FloorLive, composed from Platform components. #}
+{% import "components.html" as ui %}
+{% import "feedback.html" as feedback %}
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id="factory-floor") %}
+{% call ui::header(subtitle="Record what happened on a run: scrapped material, who worked on it, and what its output measured.") %}Shop floor{% endcall %}
+{{ error }}
+{{ body }}
+{% endcall %}

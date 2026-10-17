@@ -7,6 +7,12 @@ license.workspace = true
 publish = false
 
 [dependencies]
+askama.workspace = true
+bilibi-datetime.workspace = true
+bilibi-locale.workspace = true
+bilibi-menu.workspace = true
+bilibi-ui.workspace = true
+jiff.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true

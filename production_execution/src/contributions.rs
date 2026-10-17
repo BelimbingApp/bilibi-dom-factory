@@ -1,6 +1,5 @@
 //! Bilimbi.Factory.ProductionExecution.Contributions vocabulary. Menu and
-//! routes arrive with the shop-floor pages (XP3/XP4), rather than advertising
-//! pages that do not exist yet. Capture capabilities gate the XP2 facade.
+//! the shop-floor route. Configuration pages arrive with XP4.
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_module_registry::{Contribution, Provenance};
 
@@ -32,3 +31,21 @@ inventory::submit! { Contribution::new(VOCABULARY,"factory/production_execution"
     roles:&[RoleDefinition {code:"tenant_owner",name:"Tenant Owner",description:"Contributed system role; reconciled explicitly",grant_all:false,capabilities:&[FLOOR_VIEW,VIEW,MANAGE]}],
     system_principals:&[],
 }) }
+
+
+bilibi_menu::contribute!(
+    "factory/production_execution",
+    bilibi_menu::MenuItem::page("production.factory.floor", "Shop floor", "/factory/floor")
+        .under("production")
+        .requires(bilibi_menu::Requirement::Capability(FLOOR_VIEW))
+        .order(10)
+);
+inventory::submit! { Contribution::new(
+    bilibi_module_registry::contributions::ROUTES,"factory/production_execution.floor",
+    Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &bilibi_module_registry::contributions::Route {
+        method:bilibi_module_registry::contributions::Method::Get,path:"/factory/floor",
+        service:crate::PAGES,operation:"floor",
+        access:bilibi_module_registry::contributions::Access::Capability(FLOOR_VIEW),framed:true,
+    }
+) }

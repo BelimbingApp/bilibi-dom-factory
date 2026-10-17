@@ -140,3 +140,8 @@ BILIBI_FACTORY_FIXTURE=disposable CARGO_TARGET_DIR="$HOME/bilibi/target" \
 ```
 
 The XP2 executable checks code normalization/immutability/deactivation, wastage delta chains and stock/yield, atomic rollback after posting, range snapshots and output identity validation, own/supervisor clocks and corrections, cross-order overlap/adjacency/reopening, inactive worker refusal, concurrent retries, impersonation/company/tenant refusals, SQL immutability and audit counts. It installs no product data or routes.
+
+
+## Shop floor
+
+`/factory/floor` (Production → Shop floor) requires `factory.production-execution.floor.view`. Pick an order, then a run; the `order` and `run` query parameters restore the selection. XP3 renders native-unit run yield, wastage and output measurements with their correction chains and range flags. Recording and correcting are separate grants, rechecked by every write-shaped event and again by the facade. Draft request IDs survive validation refusals and duplicate submissions. The labour panel and configuration pages are delivered by XP4.
