@@ -15,7 +15,7 @@
 //! target, and a company that is not archived, and runs in one audited
 //! `MutationBoundary` transaction. A record of another company is reported as
 //! not found.
-use bilibi_database::{Db, MutationBoundary};
+use bilibi_database::{Db, MutationBoundary, MutationTransaction};
 use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_settings::Settings;
 use bilibi_tenancy::Scope;
@@ -152,6 +152,76 @@ impl Inventory {
                 Err(error)
             }
         }
+    }
+
+    /// The four production postings on the caller's open audited transaction,
+    /// for a module whose own record must commit with the posting or not at
+    /// all (Production Execution's operation completion). The caller began
+    /// `tx` with its own audit action; Inventory still checks its own write
+    /// capability and company lock, and `authority` must be registered.
+    async fn post_on(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        kind: TransactionKind,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        let authority = self.registered(authority)?;
+        ledger::post(tx, scope, company_id, kind, request, authority).await
+    }
+
+    /// [`Inventory::record_production_consumption`] on the caller's transaction.
+    pub async fn record_production_consumption_on(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        self.post_on(tx, scope, company_id, TransactionKind::Consumption, request, authority)
+            .await
+    }
+
+    /// [`Inventory::record_output`] on the caller's transaction.
+    pub async fn record_output_on(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        self.post_on(tx, scope, company_id, TransactionKind::Output, request, authority)
+            .await
+    }
+
+    /// [`Inventory::record_production_correction`] on the caller's transaction.
+    pub async fn record_production_correction_on(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        self.post_on(tx, scope, company_id, TransactionKind::Correction, request, authority)
+            .await
+    }
+
+    /// [`Inventory::record_transform`] on the caller's transaction.
+    pub async fn record_transform_on(
+        &self,
+        tx: &mut MutationTransaction<'_>,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        self.post_on(tx, scope, company_id, TransactionKind::Transform, request, authority)
+            .await
     }
 
     /// The authority itself when it is a registered contribution's payload.
