@@ -254,8 +254,16 @@ reads the registry once when its service starts and accepts only a reference
 to a contributed static (pointer identity), so an equal value built elsewhere
 is refused; keep the static private. Each transaction records the module in
 `posting_authority` (Bilimbi records the Elixir module name). Production
-Execution's contribution arrives with XP1; until then nothing is registered in
-a production build and every production posting is refused.
+Execution contributes the production authority (XP1); without it mounted
+nothing is registered and every production posting is refused.
+
+Bilimbi's callers post inside their own `Repo.transaction`, so a module whose
+record must commit with a posting uses the `_on` variants
+(`record_output_on`, `record_transform_on`, `record_production_consumption_on`,
+`record_production_correction_on`). They take the caller's open
+`MutationTransaction` and run the same checks, locks and idempotency as the
+ones that begin their own; the caller chose the audit action and commits or
+rolls back. Production Execution completes an operation this way.
 
 ## Capabilities
 

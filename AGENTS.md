@@ -83,6 +83,10 @@ confirmations verbatim.
   context on an ordinary posting or share the static, because Inventory
   accepts only the contributed static's address and boot refuses a declaration
   outside the `factory` container.
+  A record that must commit with a posting uses the `_on` variants on your own
+  `MutationTransaction` (`production_execution/src/completion.rs`), not a
+  second connection or a post followed by an insert, so neither survives the
+  other's failure.
 - Create a lot or unit on the receipt or output line's `identity` and cite its
   `identity_id` later; read dimensions, positions and traces through the
   genealogy facade, and a mixed-unit transform's agreement through
