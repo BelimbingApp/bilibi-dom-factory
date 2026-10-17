@@ -212,6 +212,55 @@ impl Inventory {
         ledger::position(client, scope, company_id, item_id, location_id).await
     }
 
+    /// The shared company-defined property vocabulary for material and resource types.
+    pub fn normalize_property_definitions(
+        definitions: &[PropertyDefinition],
+    ) -> Result<Vec<PropertyDefinition>> {
+        property::normalize(definitions)
+    }
+
+    /// Validates and normalizes values with the same rules as material properties.
+    pub fn validate_property_values(
+        definitions: &[PropertyDefinition],
+        values: &Map<String, Value>,
+    ) -> Result<Map<String, Value>> {
+        property::validate(definitions, values)
+    }
+
+    /// Reads on a sibling's transaction, retaining Inventory authorization and
+    /// seeing pending writes without acquiring another pool connection.
+    pub async fn get_item_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Item> {
+        items::get(client, scope, company_id, id).await
+    }
+
+    /// Transaction-aware material read; see [`Inventory::get_item_on`].
+    pub async fn get_material_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Material> {
+        materials::get(client, scope, company_id, id).await
+    }
+
+    /// Transaction-aware unit read; see [`Inventory::get_item_on`].
+    pub async fn get_unit_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Unit> {
+        units::get(client, scope, company_id, id).await
+    }
+
     /// The company's item settings: its own overrides, else its tenant's.
     pub async fn item_settings(&self, scope: &Scope, company_id: i64) -> Result<ItemSettings> {
         connection!(self, client);

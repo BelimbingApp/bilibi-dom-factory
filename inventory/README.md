@@ -151,6 +151,15 @@ configuration only), so these facade checks are the Rust port's.
 `commerce.inventory.manage` is declared for grants in adopted databases and
 gates nothing yet.
 
+## Sibling callers
+
+`get_item_on`, `get_material_on` and `get_unit_on` read through a caller's
+PostgreSQL client/transaction with the same capability and scope checks as the
+pooled reads. Use them while holding a mutation's company lock; acquiring a
+second connection could exhaust the pool with concurrent writers.
+`normalize_property_definitions` and `validate_property_values` expose the
+shared property contract through Inventory, without exposing private helpers.
+
 ## Settings
 
 | Key | Scopes | Default |
