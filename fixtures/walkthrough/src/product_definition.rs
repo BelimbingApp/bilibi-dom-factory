@@ -419,13 +419,13 @@ async fn main() -> Result<(), Error> {
     refusal(
         "staff read",
         pd.list_products(&staff, 1, None).await,
-        "Forbidden",
+        "Access denied",
     )?;
     refusal(
         "viewer write",
         pd.create_resource_type(&viewer, 1, &NewResourceType::default())
             .await,
-        "Forbidden",
+        "Access denied",
     )?;
     refusal(
         "other tenant",
@@ -441,6 +441,46 @@ async fn main() -> Result<(), Error> {
         "resource type from other company",
         pd.create_resource(&manager, 2, &new_resource).await,
         "Resource type not found",
+    )?;
+
+    let admin = login(&app, "admin@example.test").await?;
+    let grants = app.services.get::<Grants>("base/authz.grants")?;
+    let manage = "factory.product-definition.configuration.manage";
+    grants
+        .set_direct(&admin, manager.user(), manage, Some(false))
+        .await?;
+    refusal(
+        "grant revoked after session creation",
+        pd.update_resource(&manager, 1, resource.id, &ResourceUpdate::default())
+            .await,
+        "Access denied",
+    )?;
+    grants
+        .set_direct(&admin, manager.user(), manage, None)
+        .await?;
+
+    // Fault injection only in this disposable fixture: audit rejection must
+    // roll the business row back, not merely report a failed audit afterward.
+    client.batch_execute("CREATE FUNCTION xd1_refuse_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.auditable_type='factory_resource_types' THEN RAISE EXCEPTION 'fixture audit refusal'; END IF; RETURN NEW; END $$; CREATE TRIGGER xd1_refuse_audit BEFORE INSERT ON base_audit_mutations FOR EACH ROW EXECUTE FUNCTION xd1_refuse_audit()").await?;
+    let failed = pd
+        .create_resource_type(
+            &manager,
+            1,
+            &NewResourceType {
+                code: "ROLLBACK".into(),
+                name: "Rollback proof".into(),
+                ..Default::default()
+            },
+        )
+        .await;
+    client.batch_execute("DROP TRIGGER xd1_refuse_audit ON base_audit_mutations; DROP FUNCTION xd1_refuse_audit()").await?;
+    refusal("audit rejection", failed, "Database unavailable")?;
+    verify(
+        "audit failure leaves no business row",
+        !pd.list_resource_types(&viewer, 1, None)
+            .await?
+            .iter()
+            .any(|r| r.code == "ROLLBACK"),
     )?;
 
     inventory.retire_unit(&manager, 1, spare_unit.id).await?;
