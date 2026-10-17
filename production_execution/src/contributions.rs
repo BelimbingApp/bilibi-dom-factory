@@ -1,7 +1,6 @@
 //! Bilimbi.Factory.ProductionExecution.Contributions vocabulary. Menu and
 //! routes arrive with the shop-floor pages (XP3/XP4), rather than advertising
-//! pages that do not exist yet; the shop-floor capture capabilities arrive
-//! with the capture they gate (XP2).
+//! pages that do not exist yet. Capture capabilities gate the XP2 facade.
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_module_registry::{Contribution, Provenance};
 

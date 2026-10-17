@@ -1,8 +1,8 @@
 //! Operation completion: validation against the order's selected revisions,
 //! material hold checks, and the one transaction that posts the material
 //! effects through Inventory and records the execution with its override
-//! evidence. This module holds the posting authority: Inventory accepts a
-//! production posting only from this contributed static.
+//! evidence. The crate's private contributed authority also serves wastage;
+//! Inventory accepts production only from that static's address.
 use crate::AUTHORITY;
 use crate::{
     contributions::{HOLD_OVERRIDE, MANAGE},

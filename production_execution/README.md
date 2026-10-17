@@ -9,7 +9,7 @@ Bilimbi `ProductionExecution` at `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 ## Facade
 
 Order and execution reads take a sealed scope and company, require
-`factory.production-execution.floor.view`, and checks the live company. Every
+`factory.production-execution.floor.view`, and check the live company. Every
 order/completion write rechecks `factory.production-execution.configuration.manage` and the
 authorized writable company inside `MutationBoundary`. `tenant_owner` holds
 `floor.view`, `configuration.view` and `configuration.manage`; an administrator

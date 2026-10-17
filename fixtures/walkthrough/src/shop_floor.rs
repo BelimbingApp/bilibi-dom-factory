@@ -3,8 +3,8 @@
 //! confined to fixture discovery, independent assertions and failure injection.
 use bilibi_audit::RequestInfo;
 use bilibi_authz::grants::Grants;
-use bilibi_factory_inventory::{Decimal, Inventory};
-use bilibi_factory_production_execution::ProductionExecution;
+use bilibi_factory_inventory::{Decimal, Inventory, StockLine};
+use bilibi_factory_production_execution::{Completion, ProductionExecution, Source};
 use bilibi_tenancy::Scope;
 use serde_json::{json, Value};
 use std::fmt::Debug;
@@ -68,6 +68,14 @@ async fn main() -> Result<(), Error> {
         .services
         .get::<Inventory>(bilibi_factory_inventory::SERVICE)?;
     let grants = app.services.get::<Grants>("base/authz.grants")?;
+    let c = db.get().await?;
+    if c.query_opt("SELECT 1 FROM factory_operation_executions WHERE tenant_id=1 AND company_id=1 AND request_id='run-1'",&[]).await?.is_none(){return Err("run production-execution first on a disposable database".into());}
+    // The shared fixture deliberately leaves these accounts unlinked. XP2
+    // needs actual company-affiliated workers and a supervisor, not a bypass
+    // for an unlinked tenant administrator. Fixture setup only, before login.
+    for user in [2_i64, 3, 4] {
+        c.execute("WITH p AS (INSERT INTO persons(tenant_id,name,kind) SELECT tenant_id,name,'human' FROM users WHERE tenant_id=1 AND id=$1 RETURNING id,tenant_id), a AS (INSERT INTO person_affiliations(tenant_id,person_id,organisation_id) SELECT tenant_id,id,1 FROM p RETURNING id,person_id,tenant_id,organisation_id) UPDATE users u SET person_id=a.person_id,affiliation_id=a.id,organisation_id=a.organisation_id FROM a WHERE u.tenant_id=a.tenant_id AND u.id=$1",&[&user]).await?;
+    }
     // Do not reconcile XP1's roles away. Grants are real authenticated writes.
     let (admin, token) = login(&app, "admin@example.test").await?;
     let (manager, _) = login(&app, "manager@example.test").await?;
@@ -102,7 +110,6 @@ async fn main() -> Result<(), Error> {
             Some(false),
         )
         .await?;
-    let c = db.get().await?;
     let order: i64 = c.query_one("SELECT id FROM factory_production_orders WHERE tenant_id=$1 AND company_id=1 AND code='ORD-1'", &[&admin.tenant()]).await?.get(0);
     let batch: i64 = c.query_one("SELECT id FROM factory_production_orders WHERE tenant_id=$1 AND company_id=1 AND code='BATCH-1'", &[&admin.tenant()]).await?.get(0);
     let run: i64 = c.query_one("SELECT id FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=1 AND request_id='run-1'", &[&admin.tenant()]).await?.get(0);
@@ -408,6 +415,79 @@ async fn main() -> Result<(), Error> {
             .runs
             .iter()
             .any(|r| r.id == run && r.order.id == order),
+    )?;
+    let free_input = tx
+        .entries
+        .iter()
+        .find(|e| e.role == "stock" && number(&e.native_quantity) == number("-5"))
+        .expect("XP1 free input");
+    let consumed = pe
+        .complete_operation(
+            &admin,
+            1,
+            order,
+            Source::Live,
+            &Completion {
+                request_id: "xp2-consumption-only".into(),
+                operation_code: execution.operation_code.clone(),
+                resource_id: execution.resource_id,
+                operator_type: "user".into(),
+                operator_id: admin.user(),
+                started_at: std::time::SystemTime::now() - std::time::Duration::from_secs(600),
+                completed_at: std::time::SystemTime::now() - std::time::Duration::from_secs(60),
+                inputs: vec![StockLine {
+                    item_id: free_input.item_id.unwrap(),
+                    identity_id: free_input.identity_id,
+                    location_id: free_input.location_id,
+                    quantity: number("1"),
+                    ..Default::default()
+                }],
+                outputs: vec![],
+                variance: None,
+                evidence: "capture proof consumption-only run".into(),
+                hold_override: None,
+            },
+        )
+        .await?;
+    let forward = pe
+        .trace_forward(&admin, 1, free_input.identity_id.unwrap())
+        .await?;
+    verify(
+        "forward trace includes consuming run without outputs",
+        forward.runs.iter().any(|r| r.id == consumed.id),
+    )?;
+    let consumed_yield = pe.get_run_yield(&admin, 1, consumed.id).await?;
+    verify(
+        "consumption-only yield",
+        consumed_yield.balances.len() == 1
+            && number(&consumed_yield.balances[0].input) == number("1")
+            && number(&consumed_yield.balances[0].product) == Decimal::ZERO,
+    )?;
+    let input_loss=pe.record_wastage(&manager,1,run,&json!({"request_id":"xp2-input-loss","reason_id":id(&reason),"item_id":input.item_id,"location_id":input.location_id,"identity_id":input.identity_id,"quantity":"0.25","observation":"measured"})).await?;
+    let y = pe.get_run_yield(&admin, 1, run).await?;
+    let b = y
+        .balances
+        .iter()
+        .find(|b| b.unit.id == input.native_unit_id)
+        .unwrap();
+    verify(
+        "input wastage increases input and waste",
+        number(&b.input) == number("15.25") && number(&b.waste) == number(&b.wastage),
+    )?;
+    let u = pe
+        .get_unit_yield(&admin, 1, input.identity_id.unwrap())
+        .await?;
+    let r = u.runs.iter().find(|r| r.execution_id == run).unwrap();
+    let b = r
+        .balances
+        .iter()
+        .find(|b| b.unit.id == input.native_unit_id)
+        .unwrap();
+    verify(
+        "unit yield keeps whole-run and exact identity input",
+        number(&b.input) == number("15.25")
+            && number(b.unit_input.as_deref().unwrap()) == number("10.25")
+            && input_loss["inventory_transaction_id"].is_number(),
     )?;
 
     println!("== measurements and snapshots");
