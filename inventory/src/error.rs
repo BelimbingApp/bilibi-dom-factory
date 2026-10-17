@@ -21,8 +21,30 @@ pub enum Error {
     UnitNotFound,
     #[error("Unit retired")]
     UnitRetired,
+    #[error("Unit in use")]
+    UnitInUse,
     #[error("Location not found")]
     LocationNotFound,
+    #[error("Item not found")]
+    ItemNotFound,
+    #[error("Material type not found")]
+    MaterialTypeNotFound,
+    #[error("Material type retired")]
+    MaterialTypeRetired,
+    #[error("Material type in use")]
+    MaterialTypeInUse,
+    #[error("Invalid property definitions")]
+    InvalidPropertyDefinitions,
+    #[error("Invalid properties")]
+    InvalidProperties,
+    #[error("Material not found")]
+    MaterialNotFound,
+    #[error("Material retired")]
+    MaterialRetired,
+    #[error("Conversion not found")]
+    ConversionNotFound,
+    #[error("Native unit")]
+    NativeUnit,
     #[error("Invalid item statuses")]
     InvalidItemStatuses,
     #[error("Invalid default currency")]

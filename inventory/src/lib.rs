@@ -1,15 +1,19 @@
-//! Factory Inventory (`factory/inventory`): the company item master settings,
-//! units of measure and stock locations behind one facade, [`Inventory`].
+//! Factory Inventory (`factory/inventory`): the item master and its company
+//! settings, units of measure, stock locations, material types, material
+//! identity and versioned unit conversions behind one facade, [`Inventory`].
 //! Schema, SQL, validation and helpers stay private to this crate; later
-//! slices add the catalog, the Material Transaction ledger and genealogy
-//! behind the same facade.
+//! slices add the Material Transaction ledger and genealogy behind the same
+//! facade.
 //!
 //! Every operation takes the sealed [`Scope`] and a company ID. A read needs
-//! `factory.inventory.configuration.view` and a live company of the scope's
-//! tenant; a write needs `factory.inventory.configuration.manage`, the
-//! company as an authorized target, and a company that is not archived, and
-//! runs in one audited `MutationBoundary` transaction. A record of another
-//! company is reported as not found.
+//! its view capability (`factory.inventory.configuration.view`, or
+//! `commerce.inventory.item.list`/`.view` for the item master) and a live
+//! company of the scope's tenant; a write needs its manage capability
+//! (`factory.inventory.configuration.manage`, or
+//! `commerce.inventory.item.create`/`.update`), the company as an authorized
+//! target, and a company that is not archived, and runs in one audited
+//! `MutationBoundary` transaction. A record of another company is reported as
+//! not found.
 use bilibi_database::{Db, MutationBoundary};
 use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_settings::Settings;
@@ -18,13 +22,25 @@ use std::sync::Arc;
 
 mod access;
 mod contributions;
+mod conversions;
 mod error;
+mod items;
 mod locations;
+mod material_types;
+mod materials;
+mod property;
 mod settings;
 mod units;
 
+pub use conversions::Conversion;
 pub use error::{Error, FieldError};
+pub use items::{Item, ItemUpdate, NewItem};
 pub use locations::{Location, NewLocation};
+pub use material_types::{MaterialType, MaterialTypeUpdate, NewMaterialType};
+pub use materials::{Material, MaterialTyping};
+pub use property::{PropertyDefinition, VALUE_TYPES};
+pub use rust_decimal::Decimal;
+pub use serde_json::{Map, Value};
 pub use settings::ItemSettings;
 pub use units::{NewUnit, Unit};
 
@@ -188,6 +204,253 @@ impl Inventory {
             locations::create(&mut tx, scope, company_id, new).await
         })
     }
+    /// The company's items ordered by SKU, optionally of one `status`, at
+    /// most `limit` (default 100, maximum 500).
+    pub async fn list_items(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        status: Option<&str>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Item>> {
+        connection!(self, client);
+        items::list(client, scope, company_id, status, limit).await
+    }
+
+    pub async fn get_item(&self, scope: &Scope, company_id: i64, item_id: i64) -> Result<Item> {
+        connection!(self, client);
+        items::get(client, scope, company_id, item_id).await
+    }
+
+    /// Reads an item by SKU. SKUs are stored upper-case, so the lookup is too.
+    pub async fn get_item_by_sku(&self, scope: &Scope, company_id: i64, sku: &str) -> Result<Item> {
+        connection!(self, client);
+        items::get_by_sku(client, scope, company_id, sku).await
+    }
+
+    /// Creates an item master row with Belimbing's create rules and the
+    /// company's item settings ([`Inventory::item_settings`]).
+    pub async fn create_item(&self, scope: &Scope, company_id: i64, new: &NewItem) -> Result<Item> {
+        audited!(self, scope, "factory.inventory.create_item", |tx| {
+            items::create(&mut tx, &self.settings, scope, company_id, new).await
+        })
+    }
+
+    /// Defines a company material type. Its property definitions stop
+    /// changing once a material uses it, so recorded values keep their meaning.
+    pub async fn create_material_type(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        new: &NewMaterialType,
+    ) -> Result<MaterialType> {
+        audited!(
+            self,
+            scope,
+            "factory.inventory.create_material_type",
+            |tx| { material_types::create(&mut tx, scope, company_id, new).await }
+        )
+    }
+
+    pub async fn get_material_type(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        material_type_id: i64,
+    ) -> Result<MaterialType> {
+        connection!(self, client);
+        material_types::get(client, scope, company_id, material_type_id).await
+    }
+
+    /// The company's material types ordered by code, at most `limit`
+    /// (default 100, maximum 500).
+    pub async fn list_material_types(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        limit: Option<i64>,
+    ) -> Result<Vec<MaterialType>> {
+        connection!(self, client);
+        material_types::list(client, scope, company_id, limit).await
+    }
+
+    /// Updates a material type. Property definitions cannot change after a
+    /// material uses the type; a retired type takes no edit.
+    pub async fn update_material_type(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        material_type_id: i64,
+        update: &MaterialTypeUpdate,
+    ) -> Result<MaterialType> {
+        audited!(
+            self,
+            scope,
+            "factory.inventory.update_material_type",
+            |tx| {
+                material_types::update(&mut tx, scope, company_id, material_type_id, update).await
+            }
+        )
+    }
+
+    /// Retires a material type without removing historical references.
+    pub async fn retire_material_type(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        material_type_id: i64,
+    ) -> Result<MaterialType> {
+        audited!(
+            self,
+            scope,
+            "factory.inventory.retire_material_type",
+            |tx| { material_types::retire(&mut tx, scope, company_id, material_type_id).await }
+        )
+    }
+
+    /// Makes an item a stocked material held in `native_unit_id`. An item is
+    /// registered once and its native unit never changes, because every
+    /// quantity recorded for it is in that unit. A type of another company is
+    /// not found; values the type does not define, a missing required value,
+    /// or a value of the wrong type are invalid properties.
+    pub async fn register_material(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        native_unit_id: i64,
+        typing: &MaterialTyping,
+    ) -> Result<Material> {
+        audited!(self, scope, "factory.inventory.register_material", |tx| {
+            materials::register(&mut tx, scope, company_id, item_id, native_unit_id, typing).await
+        })
+    }
+
+    /// Creates an item and registers it as a material atomically; needs
+    /// `commerce.inventory.item.create` as well.
+    pub async fn create_material(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item: &NewItem,
+        native_unit_id: i64,
+        typing: &MaterialTyping,
+    ) -> Result<Material> {
+        audited!(self, scope, "factory.inventory.create_material", |tx| {
+            materials::create(
+                &mut tx,
+                &self.settings,
+                scope,
+                company_id,
+                item,
+                native_unit_id,
+                typing,
+            )
+            .await
+        })
+    }
+
+    pub async fn get_material(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+    ) -> Result<Material> {
+        connection!(self, client);
+        materials::get(client, scope, company_id, item_id).await
+    }
+
+    /// The company's materials by item SKU, at most `limit` (default 100,
+    /// maximum 500).
+    pub async fn list_materials(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Material>> {
+        connection!(self, client);
+        materials::list(client, scope, company_id, limit).await
+    }
+
+    /// Updates an item's editable details and the material's typed values,
+    /// preserving its native unit and type; needs
+    /// `commerce.inventory.item.update` as well. A retired material takes no
+    /// update.
+    pub async fn update_material(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        item: &ItemUpdate,
+        properties: &Map<String, Value>,
+    ) -> Result<Material> {
+        audited!(self, scope, "factory.inventory.update_material", |tx| {
+            materials::update(
+                &mut tx,
+                &self.settings,
+                scope,
+                company_id,
+                item_id,
+                item,
+                properties,
+            )
+            .await
+        })
+    }
+
+    /// Retires a material, preserving its posting history.
+    pub async fn retire_material(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+    ) -> Result<Material> {
+        audited!(self, scope, "factory.inventory.retire_material", |tx| {
+            materials::retire(&mut tx, scope, company_id, item_id).await
+        })
+    }
+
+    /// Defines the next version of an item's conversion from `unit_id` to
+    /// its native unit: one `unit_id` equals `factor` native units, a positive
+    /// decimal with at most 12 decimal places. Earlier versions stay readable;
+    /// the new version becomes current.
+    pub async fn define_conversion(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        unit_id: i64,
+        factor: Decimal,
+    ) -> Result<Conversion> {
+        audited!(self, scope, "factory.inventory.define_conversion", |tx| {
+            conversions::define(&mut tx, scope, company_id, item_id, unit_id, factor).await
+        })
+    }
+
+    /// Every version of an item's conversions, by unit code then version.
+    pub async fn list_conversions(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+    ) -> Result<Vec<Conversion>> {
+        connection!(self, client);
+        conversions::list(client, scope, company_id, item_id).await
+    }
+
+    /// An item's conversion from `unit_id`: the current version, or the one
+    /// `version` names.
+    pub async fn get_conversion(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        unit_id: i64,
+        version: Option<i32>,
+    ) -> Result<Conversion> {
+        connection!(self, client);
+        conversions::get(client, scope, company_id, item_id, unit_id, version).await
+    }
 }
 
 inventory::submit! {
@@ -198,10 +461,16 @@ inventory::submit! {
             "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
             "base/settings", "base/tenancy", "core/company",
         ],
-        migrations: &[(
-            "factory-inventory-001-units-locations",
-            include_str!("../migrations/001-units-locations.sql"),
-        )],
+        migrations: &[
+            (
+                "factory-inventory-001-units-locations",
+                include_str!("../migrations/001-units-locations.sql"),
+            ),
+            (
+                "factory-inventory-002-catalog",
+                include_str!("../migrations/002-catalog.sql"),
+            ),
+        ],
         services: &[Service {
             id: SERVICE,
             factory: |services| {
