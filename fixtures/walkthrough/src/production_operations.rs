@@ -354,7 +354,8 @@ async fn main() -> Result<(), Error> {
         .iter()
         .find_map(|e| e.identity_id)
         .ok_or("source identity")?;
-    let times = db.get().await?.query_one("SELECT to_char(now()-interval '30 minutes','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),to_char(now()-interval '1 minute','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')",&[]).await?;
+    // The Z suffix denotes UTC, independent of the PostgreSQL session zone.
+    let times = db.get().await?.query_one("SELECT to_char((now()-interval '30 minutes') AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),to_char((now()-interval '1 minute') AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')",&[]).await?;
     let (started, completed): (String, String) = (times.get(0), times.get(1));
     let order_input = json!({"company_id":1,"code":"H6-ORDER","kind":"order","product_id":product,"formula_version":1,"routing_version":1,"demand_ref":"source ref"});
     let ops = [op(CREATE, order_input.clone())];
