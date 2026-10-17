@@ -145,7 +145,10 @@ impl Floor {
         self.run = None;
         self.runs.clear();
         self.clear_run();
-        let company = s::company(scope)?;
+        let Ok(company) = s::company(scope) else {
+            self.error = Some("Company not found".into());
+            return Ok(());
+        };
         if let Some(order) = bilibi_ui::params::positive_id(q.get("order").map(String::as_str)) {
             match self.pages.execution.get_order(scope, company, order).await {
                 Ok(order) => self.order = Some(order),
@@ -182,7 +185,15 @@ impl Floor {
                 self.allowed.insert(cap);
             }
         }
-        let company = s::company(scope)?;
+        let Ok(company) = s::company(scope) else {
+            self.orders.clear();
+            self.runs.clear();
+            self.order = None;
+            self.run = None;
+            self.clear_run();
+            self.error = Some("Company not found".into());
+            return Ok(());
+        };
         let c = self.pages.db.get().await?;
         let locale = self.pages.locales.resolve(&**c, scope, None).await?.locale;
         self.display = self
@@ -437,7 +448,10 @@ impl Floor {
         Ok(())
     }
     async fn save(&mut self, scope: &Scope, kind: &str, p: &Value) -> Result<()> {
-        let company = s::company(scope)?;
+        let Ok(company) = s::company(scope) else {
+            self.error = Some("Company not found".into());
+            return Ok(());
+        };
         let Some(run) = self.run.as_ref().map(|r| r.id) else {
             self.error = Some("Execution not found".into());
             return Ok(());

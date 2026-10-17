@@ -33,24 +33,18 @@ impl Floor {
                         false,
                     )?);
                 }
-                if self.orders.is_empty() {
-                    choices = s::render(EmptyState::missing(
+                body.push(&s::render(s::Picker {
+                    id: "floor-orders",
+                    title: "Choose an order",
+                    actions: Html::EMPTY,
+                    buttons: choices,
+                    empty: s::render(EmptyState::missing(
                         "No orders",
                         "Orders appear here once they are created.",
-                    ))?;
-                }
-                body.push(&self.card(
-                    "floor-orders",
-                    "Choose an order",
-                    s::render(s::Choices {
-                        legend: "Choose an order",
-                        buttons: choices,
-                        empty: "",
-                    })?,
-                )?);
+                    ))?,
+                })?);
             }
             (Some(order), None) => {
-                body.push(&s::button("Orders", "back_to_orders", "", false)?);
                 let mut choices = Html::EMPTY;
                 for run in &self.runs {
                     let mut label = Html::text(&format!("{} · ", run.operation_code));
@@ -68,21 +62,16 @@ impl Floor {
                         ..bilibi_ui::Button::default()
                     })?);
                 }
-                if self.runs.is_empty() {
-                    choices = s::render(EmptyState::missing(
+                body.push(&s::render(s::Picker {
+                    id: "floor-runs",
+                    title: &format!("Runs of {}", order.code),
+                    actions: s::button("Orders", "back_to_orders", "", false)?,
+                    buttons: choices,
+                    empty: s::render(EmptyState::missing(
                         "No runs",
                         "A run appears here once an operation of this order is completed.",
-                    ))?;
-                }
-                body.push(&self.card(
-                    "floor-runs",
-                    &format!("Runs of {}", order.code),
-                    s::render(s::Choices {
-                        legend: "Choose a run",
-                        buttons: choices,
-                        empty: "",
-                    })?,
-                )?);
+                    ))?,
+                })?);
             }
             (Some(order), Some(run)) => {
                 let mut heading = s::button("Runs", "back_to_runs", "", false)?;
@@ -99,8 +88,8 @@ impl Floor {
                     let mut stats = Html::EMPTY;
                     for balance in &yield_.balances {
                         stats.push(&s::render(StatStrip {
-                            id: "",
-                            title: "",
+                            id: &format!("floor-yield-unit-{}", balance.unit.id),
+                            title: &balance.unit.code,
                             href: "",
                             items: [
                                 ("Input", &balance.input),

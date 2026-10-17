@@ -133,3 +133,13 @@ pub(super) struct InstantView<'a> {
     pub(super) id: &'a str,
     pub(super) value: bilibi_ui::flex_table::Instant,
 }
+
+#[derive(Template)]
+#[template(path = "floor_picker.html")]
+pub(super) struct Picker<'a> {
+    pub(super) id: &'a str,
+    pub(super) title: &'a str,
+    pub(super) actions: Html,
+    pub(super) buttons: Html,
+    pub(super) empty: Html,
+}

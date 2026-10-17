@@ -1,0 +1,5 @@
+{% import "components.html" as ui %}
+<section id="{{ id }}" class="mt-5">
+{% call ui::section_heading(title=title,actions=actions) %}{% endcall %}
+{% if buttons.is_empty() %}{{ empty }}{% else %}<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{{ buttons }}</div>{% endif %}
+</section>
