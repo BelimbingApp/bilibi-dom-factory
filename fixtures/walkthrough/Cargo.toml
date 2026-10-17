@@ -53,3 +53,18 @@ tokio-postgres = "0.7"
 [[bin]]
 name = "shop-floor"
 path = "src/shop_floor.rs"
+
+
+# XP3 live-page proof and browser host; run after production-execution and shop-floor.
+[[bin]]
+name = "floor-pages"
+path = "src/floor_pages.rs"
+
+[dependencies.bilibi-ui]
+path = "../../../../base/ui"
+
+[dependencies.bilibi-datetime]
+path = "../../../../base/datetime"
+
+[dependencies.jiff]
+version = "0.2.38"

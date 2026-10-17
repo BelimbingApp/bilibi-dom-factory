@@ -32,7 +32,6 @@ inventory::submit! { Contribution::new(VOCABULARY,"factory/production_execution"
     system_principals:&[],
 }) }
 
-
 bilibi_menu::contribute!(
     "factory/production_execution",
     bilibi_menu::MenuItem::page("production.factory.floor", "Shop floor", "/factory/floor")

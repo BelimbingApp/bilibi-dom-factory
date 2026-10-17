@@ -256,5 +256,6 @@ inventory::submit! { Module {
         execution: services.get(SERVICE)?,
         inventory: services.get(bilibi_factory_inventory::SERVICE)?,
         display: services.get("base/datetime.display")?,
+        locales: services.get("base/locale.locales")?,
     })))) }],
 } }

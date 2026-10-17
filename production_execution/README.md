@@ -145,3 +145,10 @@ The XP2 executable checks code normalization/immutability/deactivation, wastage 
 ## Shop floor
 
 `/factory/floor` (Production → Shop floor) requires `factory.production-execution.floor.view`. Pick an order, then a run; the `order` and `run` query parameters restore the selection. XP3 renders native-unit run yield, wastage and output measurements with their correction chains and range flags. Recording and correcting are separate grants, rechecked by every write-shaped event and again by the facade. Draft request IDs survive validation refusals and duplicate submissions. The labour panel and configuration pages are delivered by XP4.
+
+
+Timestamps use Base Datetime's display policy and shared timestamp component. `src/web/time.rs` is the private company-time entry contract for XP4: company/local display reads entered wall time in the company zone; UTC display reads UTC. A daylight-saving gap is refused and a fold picks the earlier instant. An unchanged minute input keeps the original seconds and subsecond precision.
+
+### Page proof
+
+On a disposable migrated database, run the existing `production-execution` and `shop-floor` walkthrough binaries, then `floor-pages` from `fixtures/walkthrough` with the same `BILIBI_FACTORY_FIXTURE=disposable`, `DATABASE_URL`, and Platform `CARGO_TARGET_DIR`. It drives the registered PageService and real facade mutations (selection, range flags, both corrections, retry, stale permission and archived company refusals), plus the same company-time source. `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35593 BIND_ADDR=127.0.0.1:35593` keeps the composed app running for browser proof after the checks. No fixture data is a product seed.
