@@ -88,6 +88,12 @@ confirmations verbatim.
   genealogy facade, and a mixed-unit transform's agreement through
   `get_transaction_balance`, never by converting quantities yourself, because
   posted observations and conversion versions are the record.
+- Expose an Inventory write to agents only as a reviewed safe write in
+  `inventory/src/agent_operations.rs`, calling the facade's own code
+  (`ledger::post`, `locations::create`) inside the plan's `MutationTransaction`
+  and previewing it in a rolled-back transaction. Do not write a second
+  validator, direct write or production posting there: the preview must refuse
+  exactly what the commit will, and an agent holds no `PostingAuthority`.
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.

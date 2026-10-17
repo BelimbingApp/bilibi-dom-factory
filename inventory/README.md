@@ -50,6 +50,48 @@ transaction. A record of another company is reported as not found. Failures are
 `Error`: its texts are Bilimbi's ("Unit not found", "Code has already been
 taken", "Invalid item statuses", "Material type in use").
 
+## Agent operations
+
+Locations, receipts, transfers, consumption and corrections have no page in
+the reference, so a fresh install reaches them through Bilibi's agent API
+(`/api/v1`, `/mcp`), contributed from `src/agent_operations.rs` as
+`factory.inventory.*` operations. Every input names a `company_id`; quantities
+and conversion factors are decimal strings and results carry exact decimal
+strings, never floats. Reads need `factory.inventory.configuration.view`,
+writes `factory.inventory.configuration.manage`; each calls the facade's own
+code, so company authorization, the writable-company lock and refusal texts
+are the facade's.
+
+| Key | Kind | Does |
+| --- | --- | --- |
+| `location.list`, `location.get` | read | the facade's `list_locations`, `get_location` |
+| `stock.position` | read | `get_stock_position`: exact stock of an item at a location |
+| `transaction.list`, `.get`, `.corrections`, `.balance` | read | `list_transactions` (newest first, `item_id`, `limit`), `get_transaction`, `list_corrections`, `get_transaction_balance` |
+| `identity.get`, `.positions`, `.draws`, `.trace` | read | `get_identity`, `get_identity_positions`, `list_identity_draws`, and `trace_backward`/`trace_forward` by `direction` |
+| `location.create` | safe write | `create_location` |
+| `receipt.record`, `transfer.record`, `consumption.record`, `correction.record` | safe write | the facade's four ordinary postings, with weighed receipts, lot or unit identities (receipt lines), identity citations and signed corrections |
+
+A write is a reviewed safe write: `preview` and `commit` through
+`base/agent_api.plans`, never a direct call. The preview runs the real code
+path (`ledger::post`, `locations::create`) in a transaction of its own and
+rolls it back, so the review shows what the commit will decide: every refusal
+(blank fields, insufficient stock by location, identity or unidentified pool,
+a retired material, an unknown conversion, a `request_id` reused with other
+content), each entry with its exact native quantity, and the stock before and
+after. It carries no generated ID or timestamp, so the commit's own preview
+reproduces it and any stock change in between makes the plan stale. A request
+that repeats a recorded one reviews as `replay: true` and commits as the
+original. The commit posts inside the plan's audited transaction; the
+capability and company are checked again in the facade. A plan's reviews see
+committed data only, so create a location in its own plan before a posting
+names it.
+
+Production postings (`record_output`, `record_transform`, the production
+consumption and correction) are deliberately not operations: they need a
+registered `PostingAuthority`, which an agent cannot hold. Production context
+keys are not in the schema, and correcting a production transaction is refused
+as `Unregistered posting authority`.
+
 ## Catalog rules
 
 - **Item master.** `commerce_inventory_items` keeps Belimbing's columns and
