@@ -1,0 +1,2 @@
+{#- The page's one alert line (Bilimbi's `<p id="…-error" role="alert">`). -#}
+{%- if let Some(error) = error -%}<p id="{{ id }}" role="alert" class="mt-4 text-sm text-danger-ink">{{ error }}</p>{%- endif -%}

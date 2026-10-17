@@ -1,0 +1,3 @@
+# Page fragments compose the shared Base UI macros (components.html) in place.
+[general]
+dirs = ["templates", "../../../base/ui/templates"]

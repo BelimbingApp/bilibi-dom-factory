@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+askama.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true
@@ -15,6 +16,7 @@ bilibi-module-registry.workspace = true
 bilibi-party-ids.workspace = true
 bilibi-settings.workspace = true
 bilibi-tenancy.workspace = true
+bilibi-ui.workspace = true
 inventory.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true

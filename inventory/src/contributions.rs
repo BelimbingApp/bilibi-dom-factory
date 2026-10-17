@@ -4,7 +4,10 @@
 //! settings the item master reads.
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_menu::{MenuItem, Requirement};
-use bilibi_module_registry::{Contribution, Provenance};
+use bilibi_module_registry::{
+    contributions::{Access, Method, Route, ROUTES},
+    Contribution, Provenance,
+};
 use bilibi_settings::{Definition, Editor, ScopeKind, Setting, Validator, ValueType, DEFINITIONS};
 use serde_json::{json, Value};
 
@@ -107,3 +110,35 @@ inventory::submit! { Contribution::new(DEFINITIONS, DEFAULT_CURRENCY_KEY, proven
     validator: Some(Validator { accepts: currency_valid, message: "Give a three-letter currency code, or none" }),
     editor: Some(Editor { group: "Factory", label: "Default item currency", help: "ISO 4217 code an item takes when none is given. Unset, each item names its own.", capability: Some(CONFIGURATION_MANAGE), reveal_duration_ms: 5_000 }),
 })) }
+
+// Bilimbi `priv/web_routes.exs`: five pages behind the configuration view
+// capability. Each is checked again on every live event.
+macro_rules! page {
+    ($id:literal, $path:literal, $operation:literal) => {
+        inventory::submit! { Contribution::new(ROUTES, $id, provenance!(), &Route {
+            method: Method::Get, path: $path, service: crate::pages::SERVICE, operation: $operation,
+            access: Access::Capability(CONFIGURATION_VIEW), framed: true,
+        }) }
+    };
+}
+page!(
+    "factory/inventory.material_types",
+    "/factory/material-types",
+    "material_types"
+);
+page!("factory/inventory.units", "/factory/units", "units");
+page!(
+    "factory/inventory.item_settings",
+    "/factory/item-settings",
+    "item_settings"
+);
+page!(
+    "factory/inventory.conversions",
+    "/factory/conversions",
+    "conversions"
+);
+page!(
+    "factory/inventory.materials",
+    "/factory/materials",
+    "materials"
+);

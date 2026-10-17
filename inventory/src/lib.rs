@@ -28,6 +28,7 @@ mod items;
 mod locations;
 mod material_types;
 mod materials;
+mod pages;
 mod property;
 mod settings;
 mod units;
@@ -459,7 +460,7 @@ inventory::submit! {
         layer: Layer::Domains,
         dependencies: &[
             "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
-            "base/settings", "base/tenancy", "core/company",
+            "base/settings", "base/tenancy", "base/ui", "core/company",
         ],
         migrations: &[
             (
@@ -472,6 +473,16 @@ inventory::submit! {
             ),
         ],
         services: &[Service {
+            id: pages::SERVICE,
+            factory: |services| {
+                Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(
+                    Arc::new(pages::Pages {
+                        db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
+                        inventory: services.get(SERVICE)?,
+                    }),
+                )))
+            },
+        }, Service {
             id: SERVICE,
             factory: |services| {
                 Ok(Arc::new(Inventory {
