@@ -12,6 +12,7 @@ bilibi-company.workspace = true
 bilibi-database.workspace = true
 bilibi-module-registry.workspace = true
 bilibi-tenancy.workspace = true
+bilibi-user.workspace = true
 bilibi-factory-inventory = { path = "../inventory" }
 bilibi-factory-product-definition = { path = "../product_definition" }
 deadpool-postgres.workspace = true
