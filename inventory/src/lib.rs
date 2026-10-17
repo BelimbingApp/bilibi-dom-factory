@@ -181,8 +181,15 @@ impl Inventory {
         request: &PostingRequest,
         authority: &'static PostingAuthority,
     ) -> Result<MaterialTransaction> {
-        self.post_on(tx, scope, company_id, TransactionKind::Consumption, request, authority)
-            .await
+        self.post_on(
+            tx,
+            scope,
+            company_id,
+            TransactionKind::Consumption,
+            request,
+            authority,
+        )
+        .await
     }
 
     /// [`Inventory::record_output`] on the caller's transaction.
@@ -194,8 +201,15 @@ impl Inventory {
         request: &PostingRequest,
         authority: &'static PostingAuthority,
     ) -> Result<MaterialTransaction> {
-        self.post_on(tx, scope, company_id, TransactionKind::Output, request, authority)
-            .await
+        self.post_on(
+            tx,
+            scope,
+            company_id,
+            TransactionKind::Output,
+            request,
+            authority,
+        )
+        .await
     }
 
     /// [`Inventory::record_production_correction`] on the caller's transaction.
@@ -207,8 +221,15 @@ impl Inventory {
         request: &PostingRequest,
         authority: &'static PostingAuthority,
     ) -> Result<MaterialTransaction> {
-        self.post_on(tx, scope, company_id, TransactionKind::Correction, request, authority)
-            .await
+        self.post_on(
+            tx,
+            scope,
+            company_id,
+            TransactionKind::Correction,
+            request,
+            authority,
+        )
+        .await
     }
 
     /// [`Inventory::record_transform`] on the caller's transaction.
@@ -220,8 +241,15 @@ impl Inventory {
         request: &PostingRequest,
         authority: &'static PostingAuthority,
     ) -> Result<MaterialTransaction> {
-        self.post_on(tx, scope, company_id, TransactionKind::Transform, request, authority)
-            .await
+        self.post_on(
+            tx,
+            scope,
+            company_id,
+            TransactionKind::Transform,
+            request,
+            authority,
+        )
+        .await
     }
 
     /// The authority itself when it is a registered contribution's payload.

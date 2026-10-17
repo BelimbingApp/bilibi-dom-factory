@@ -26,6 +26,10 @@ path = "src/agent_operations.rs"
 name = "product-definition-pages"
 path = "src/product_definition_pages.rs"
 
+[[bin]]
+name = "production-execution"
+path = "src/production_execution.rs"
+
 [workspace]
 
 [dependencies]
@@ -36,6 +40,8 @@ bilibi-database = { path = "../../../../base/database" }
 bilibi-tenancy = { path = "../../../../base/tenancy" }
 bilibi-factory-inventory = { path = "../../inventory" }
 bilibi-factory-product-definition = { path = "../../product_definition" }
+bilibi-factory-production-execution = { path = "../../production_execution" }
+bilibi-audit = { path = "../../../../base/audit" }
 bilibi-walkthrough-fixture = { path = "../../../../../fixtures/walkthrough" }
 bilibi-web = { path = "../../../../web" }
 axum = "0.8"
