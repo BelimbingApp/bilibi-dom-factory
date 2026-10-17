@@ -1,5 +1,5 @@
 //! Bilimbi.Factory.ProductionExecution.Contributions vocabulary. Menu and
-//! the shop-floor route. Configuration pages arrive with XP4.
+//! shop-floor and configuration pages.
 use bilibi_authz::{CapabilityDefinition as C, RoleDefinition, VocabularyContribution, VOCABULARY};
 use bilibi_module_registry::{Contribution, Provenance};
 
@@ -46,5 +46,68 @@ inventory::submit! { Contribution::new(
         method:bilibi_module_registry::contributions::Method::Get,path:"/factory/floor",
         service:crate::PAGES,operation:"floor",
         access:bilibi_module_registry::contributions::Access::Capability(FLOOR_VIEW),framed:true,
+    }
+) }
+
+bilibi_menu::contribute!(
+    "factory/production_execution",
+    bilibi_menu::MenuItem::page(
+        "admin.factory.wastage-reasons",
+        "Wastage reasons",
+        "/factory/wastage-reasons"
+    )
+    .under("admin.factory")
+    .requires(bilibi_menu::Requirement::Capability(VIEW))
+    .order(80)
+);
+inventory::submit! { Contribution::new(
+    bilibi_module_registry::contributions::ROUTES,"factory/production_execution.wastage-reasons",
+    Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &bilibi_module_registry::contributions::Route {
+        method:bilibi_module_registry::contributions::Method::Get,path:"/factory/wastage-reasons",
+        service:crate::PAGES,operation:"wastage-reasons",
+        access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
+    }
+) }
+
+bilibi_menu::contribute!(
+    "factory/production_execution",
+    bilibi_menu::MenuItem::page(
+        "admin.factory.labour-roles",
+        "Labour roles",
+        "/factory/labour-roles"
+    )
+    .under("admin.factory")
+    .requires(bilibi_menu::Requirement::Capability(VIEW))
+    .order(85)
+);
+inventory::submit! { Contribution::new(
+    bilibi_module_registry::contributions::ROUTES,"factory/production_execution.labour-roles",
+    Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &bilibi_module_registry::contributions::Route {
+        method:bilibi_module_registry::contributions::Method::Get,path:"/factory/labour-roles",
+        service:crate::PAGES,operation:"labour-roles",
+        access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
+    }
+) }
+
+bilibi_menu::contribute!(
+    "factory/production_execution",
+    bilibi_menu::MenuItem::page(
+        "admin.factory.measurement-types",
+        "Measurement types",
+        "/factory/measurement-types"
+    )
+    .under("admin.factory")
+    .requires(bilibi_menu::Requirement::Capability(VIEW))
+    .order(90)
+);
+inventory::submit! { Contribution::new(
+    bilibi_module_registry::contributions::ROUTES,"factory/production_execution.measurement-types",
+    Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &bilibi_module_registry::contributions::Route {
+        method:bilibi_module_registry::contributions::Method::Get,path:"/factory/measurement-types",
+        service:crate::PAGES,operation:"measurement-types",
+        access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
     }
 ) }

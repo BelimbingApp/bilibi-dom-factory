@@ -1,0 +1,12 @@
+{% import "components.html" as ui %}
+{% import "forms.html" as form %}
+<form id="{{ id }}" data-event="save_entry" class="space-y-4 p-4">
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+{% for field in fields %}{% call form::input(field=field) %}{% endcall %}{% endfor %}
+</div>
+{% if !hint.is_empty() %}<p class="text-sm text-ink-muted">{{ hint }}</p>{% endif %}
+<div class="flex gap-2">
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary,button_type="submit") %}Save{% endcall %}
+{% call ui::button(button_type="button",event="cancel") %}Cancel{% endcall %}
+</div>
+</form>
