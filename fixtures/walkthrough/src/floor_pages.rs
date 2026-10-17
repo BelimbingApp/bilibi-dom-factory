@@ -425,6 +425,16 @@ async fn main() -> Result<(), Error> {
     let body = event(
         &mut state,
         &manager,
+        json!({"type":"clear-flash","key":"success"}),
+    )
+    .await?;
+    verify(
+        "success dismissal keeps the floor live",
+        !body.html.contains("Measurement corrected.") && body.html.contains("measurements-table"),
+    )?;
+    let body = event(
+        &mut state,
+        &manager,
         json!({"type":"wastage_grid","op":"zoom_preset","preset":"compact"}),
     )
     .await?;

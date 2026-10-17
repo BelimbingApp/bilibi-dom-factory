@@ -97,6 +97,7 @@ impl Types {
         self.notice.begin();
         let kind = s::text(payload, "type").ok_or(bilibi_database::Error::Invalid)?;
         match kind {
+            "clear-flash" => return Ok(()),
             "grid" => {
                 s::grid(&mut self.columns, payload);
                 return Ok(());

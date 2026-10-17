@@ -146,6 +146,9 @@ impl Codes {
     pub(super) async fn event(&mut self, scope: &Scope, p: &Value) -> Result<()> {
         self.success = None;
         let event = s::text(p, "type");
+        if event == "clear-flash" {
+            return Ok(());
+        }
         if event == "grid" {
             let _ = self.columns.handle(&bilibi_ui::params::string_values(p));
             return Ok(());
