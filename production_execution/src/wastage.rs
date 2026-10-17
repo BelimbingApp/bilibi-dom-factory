@@ -60,33 +60,6 @@ impl ProductionExecution {
         if quantity < Decimal::ZERO || (correction.is_none() && quantity.is_zero()) {
             return Err(Error::Capture("Invalid quantity"));
         }
-        let mut intent = capture::intent(
-            attrs,
-            &[
-                "request_id",
-                "reason_id",
-                "item_id",
-                "location_id",
-                "identity_id",
-                "quantity",
-                "observation",
-                "note",
-                "occurred_at",
-                "correction_reason",
-            ],
-        )?;
-        intent["quantity"] = json!(quantity.to_string());
-        if intent.get("note").is_some() {
-            intent["note"] = capture::text(attrs, "note", false, "Invalid note")?;
-        }
-        if correction.is_some() {
-            intent["correction_reason"] = capture::text(
-                attrs,
-                "correction_reason",
-                true,
-                "Correction reason required",
-            )?;
-        }
         let mut c = self.db.get().await.map_err(bilibi_database::Error::from)?;
         let mut tx = self
             .mutations
@@ -101,11 +74,8 @@ impl ProductionExecution {
             .await?;
         let result=async{
             capture::writable(tx.sql(),scope,company,cap).await?;
-            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"wastage_correction"}else{"wastage"},target,&intent).await?;
-            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Wastage,&request,&fp).await?{return Ok((v,false));}
             let mut row=if let Some(id)=correction{
-                let old=capture::get(tx.sql(),scope,company,Table::Wastage,id).await?;
-                if !old["corrected_by_id"].is_null(){return Err(Error::Capture("Wastage already corrected"));}old
+                capture::get(tx.sql(),scope,company,Table::Wastage,id).await?
             }else{
                 let execution=orders::get_execution(tx.sql(),scope,company,target).await?;
                 let item=capture::id(attrs,"item_id")?;let identity=capture::optional_id(attrs,"identity_id")?;
@@ -120,6 +90,14 @@ impl ProductionExecution {
             if reason["active"]!=true && previous_reason!=row["reason_id"].as_i64(){return Err(Error::Capture("Wastage reason inactive"));}
             if correction.is_none() || attrs.get("note").is_some(){row["note"]=capture::text(attrs,"note",false,"Invalid note")?;}
             let delta=if correction.is_some(){decimal(&row["quantity"],"Invalid quantity")?-quantity}else{quantity};
+            row["quantity"]=json!(quantity.to_string());row["request_id"]=json!(request);
+            row["correction_reason"]=if correction.is_some(){capture::text(attrs,"correction_reason",true,"Correction reason required")?}else{Value::Null};
+            let mut command=capture::intent(&row,&["request_id","order_id","execution_id","reason_id","item_id","location_id","identity_id","quantity","unit_id","observation","note","correction_reason"])?;
+            command["corrects_id"]=json!(correction);
+            command["occurred_at"]=if correction.is_none() && attrs["occurred_at"].is_null(){Value::Null}else{row["occurred_at"].clone()};
+            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"wastage_correction"}else{"wastage"},target,&command).await?;
+            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Wastage,&request,&fp).await?{return Ok((v,false));}
+            if !row["corrected_by_id"].is_null(){return Err(Error::Capture("Wastage already corrected"));}
             let mut root=row.clone();
             while let Some(previous)=root["corrects_id"].as_i64(){root=capture::get(tx.sql(),scope,company,Table::Wastage,previous).await?;}
             let observation:Observation=serde_json::from_value(row["observation"].clone()).map_err(|_|Error::Capture("Invalid observation"))?;
@@ -130,12 +108,12 @@ impl ProductionExecution {
                 let evidence=format!("Wastage {}: {}{}",reason["code"].as_str().unwrap(),reason["label"].as_str().unwrap(),row["note"].as_str().map(|n|format!(" — {n}")).unwrap_or_default());
                 let at=row["occurred_at"].as_str().unwrap();
                 let effective_at=tx.sql().query_one("SELECT $1::text::timestamptz",&[&at]).await?.get(0);
-                let posting=PostingRequest{request_id:format!("pe-wastage:{request}"),evidence,effective_at:Some(effective_at),context,lines:vec![StockLine{item_id:capture::id(&row,"item_id")?,location_id:Some(capture::id(&row,"location_id")?),quantity:delta,unit_id:Some(capture::id(&row,"unit_id")?),identity_id:row["identity_id"].as_i64(),observation,..Default::default()}],reason:if correction.is_some(){intent["correction_reason"].as_str().map(str::to_owned)}else{None},corrects_transaction_id:if correction.is_some(){Some(capture::id(&root,"inventory_transaction_id")?)}else{None},..Default::default()};
+                let posting=PostingRequest{request_id:format!("pe-wastage:{request}"),evidence,effective_at:Some(effective_at),context,lines:vec![StockLine{item_id:capture::id(&row,"item_id")?,location_id:Some(capture::id(&row,"location_id")?),quantity:delta,unit_id:Some(capture::id(&row,"unit_id")?),identity_id:row["identity_id"].as_i64(),observation,..Default::default()}],reason:row["correction_reason"].as_str().map(str::to_owned),corrects_transaction_id:if correction.is_some(){Some(capture::id(&root,"inventory_transaction_id")?)}else{None},..Default::default()};
                 let saved=if correction.is_some(){self.completer.inventory.record_production_correction_on(&mut tx,scope,company,&posting,&AUTHORITY).await?}else{self.completer.inventory.record_production_consumption_on(&mut tx,scope,company,&posting,&AUTHORITY).await?};
                 Some(saved.id)
             };
             row["quantity"]=json!(quantity.to_string());row["inventory_transaction_id"]=json!(posted);
-            row["corrects_id"]=json!(correction);row["correction_reason"]=intent["correction_reason"].clone();row["request_id"]=json!(request);row["request_fingerprint"]=json!(fp);capture::merge(&mut row,recorder);
+            row["corrects_id"]=json!(correction);row["request_fingerprint"]=json!(fp);capture::merge(&mut row,recorder);
             Ok((capture::insert(&mut tx,scope,company,Table::Wastage,row).await?,true))
         }.await;
         capture::finish(tx, result).await

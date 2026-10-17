@@ -238,7 +238,16 @@ pub(crate) async fn time(
         return Err(Error::Capture(error));
     }
     let value = value.as_str().map(str::to_owned);
-    let row=c.query_one("SELECT to_jsonb(t),t<=clock_timestamp() AND ($2::timestamptz IS NULL OR t >= $2) FROM (SELECT COALESCE($1::text::timestamptz,clock_timestamp()) t) s", &[&value,&lower]).await.map_err(|_| Error::Capture(error))?;
+    if let Some(value) = &value {
+        let valid: bool = c.query_one(
+            "SELECT $1::text ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$'",
+            &[value],
+        ).await?.get(0);
+        if !valid {
+            return Err(Error::Capture(error));
+        }
+    }
+    let row=c.query_one("SELECT to_jsonb(t),isfinite(t) AND t<=clock_timestamp() AND ($2::timestamptz IS NULL OR t >= $2) FROM (SELECT COALESCE($1::text::timestamptz,clock_timestamp()) t) s", &[&value,&lower]).await.map_err(|_| Error::Capture(error))?;
     if !row.get::<_, bool>(1) {
         return Err(Error::Capture(error));
     }

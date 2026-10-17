@@ -81,29 +81,6 @@ impl ProductionExecution {
         };
         let recorder = self.capture_authorize(scope, company, cap).await?;
         let request = capture::request(attrs)?.to_owned();
-        let mut intent = capture::intent(
-            attrs,
-            &[
-                "request_id",
-                "measurement_type_id",
-                "identity_id",
-                "value",
-                "note",
-                "measured_at",
-                "correction_reason",
-            ],
-        )?;
-        if intent.get("note").is_some() {
-            intent["note"] = capture::text(attrs, "note", false, "Invalid note")?;
-        }
-        if correction.is_some() {
-            intent["correction_reason"] = capture::text(
-                attrs,
-                "correction_reason",
-                true,
-                "Correction reason required",
-            )?;
-        }
         let mut c = self.db.get().await.map_err(bilibi_database::Error::from)?;
         let mut tx = self
             .mutations
@@ -118,12 +95,8 @@ impl ProductionExecution {
             .await?;
         let result=async {
             capture::writable(tx.sql(),scope,company,cap).await?;
-            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"measurement_correction"}else{"measurement"},target,&intent).await?;
-            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Measurements,&request,&fp).await?{return Ok((v,false));}
             let mut row=if let Some(id)=correction {
-                let old=capture::get(tx.sql(),scope,company,Table::Measurements,id).await?;
-                if !old["corrected_by_id"].is_null(){return Err(Error::Capture("Measurement already corrected"));}
-                old
+                capture::get(tx.sql(),scope,company,Table::Measurements,id).await?
             }else{
                 let execution=orders::get_execution(tx.sql(),scope,company,target).await?;
                 let type_id=capture::id(attrs,"measurement_type_id")?;
@@ -144,8 +117,18 @@ impl ProductionExecution {
                 json!(tx.sql().query_one("SELECT COALESCE($1::text::numeric < $2::text::numeric,false) OR COALESCE($1::text::numeric > $3::text::numeric,false)",&[&valid,&min,&max]).await?.get::<_,bool>(0))
             }else{Value::Null};
             if correction.is_none() || attrs.get("note").is_some(){row["note"]=capture::text(attrs,"note",false,"Invalid note")?;}
-            row["request_id"]=json!(request);row["request_fingerprint"]=json!(fp);row["corrects_id"]=json!(correction);
-            row["correction_reason"]=intent["correction_reason"].clone();capture::merge(&mut row,recorder);
+            row["request_id"]=json!(request);row["corrects_id"]=json!(correction);
+            row["correction_reason"]=if correction.is_some(){capture::text(attrs,"correction_reason",true,"Correction reason required")?}else{Value::Null};
+            let mut command=capture::intent(&row,&["request_id","order_id","execution_id","identity_id","measurement_type_id","value","note","corrects_id","correction_reason"])?;
+            if correction.is_some(){
+                for key in ["unit","minimum","maximum","target","measured_at"]{command[key]=row[key].clone();}
+            }else{
+                command["measured_at"]=if attrs["measured_at"].is_null(){Value::Null}else{row["measured_at"].clone()};
+            }
+            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"measurement_correction"}else{"measurement"},target,&command).await?;
+            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Measurements,&request,&fp).await?{return Ok((v,false));}
+            if !row["corrected_by_id"].is_null(){return Err(Error::Capture("Measurement already corrected"));}
+            row["request_fingerprint"]=json!(fp);capture::merge(&mut row,recorder);
             Ok((capture::insert(&mut tx,scope,company,Table::Measurements,row).await?,true))
         }.await;
         capture::finish(tx, result).await

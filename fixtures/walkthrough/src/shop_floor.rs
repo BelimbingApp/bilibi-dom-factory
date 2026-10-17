@@ -249,11 +249,12 @@ async fn main() -> Result<(), Error> {
             ) == before - number("2"),
     )?;
     let audit_before = counts(&c).await?;
+    let mut optional = waste("xp2-waste", "2.000");
+    optional["note"] = Value::Null;
+    optional["identity_id"] = json!(identity);
     verify(
         "wastage replay no new audit",
-        pe.record_wastage(&manager, 1, run, &waste("xp2-waste", "2"))
-            .await?
-            == root
+        pe.record_wastage(&manager, 1, run, &optional).await? == root
             && counts(&c).await? == audit_before,
     )?;
     refusal(
@@ -431,13 +432,20 @@ async fn main() -> Result<(), Error> {
             first = row;
         }
     }
-    let unconstrained=pe.record_measurement(&manager,1,run,&json!({"request_id":"xp2-unbounded","measurement_type_id":id(&unbounded),"value":"999"})).await?;
+    let unconstrained = pe
+        .record_measurement(
+            &manager,
+            1,
+            run,
+            &json!({"request_id":"xp2-unbounded","measurement_type_id":id(&unbounded),"value":999}),
+        )
+        .await?;
     verify(
         "missing limits mean unknown not false",
         unconstrained["out_of_range"].is_null(),
     )?;
     let race =
-        json!({"request_id":"xp2-measure-race","measurement_type_id":id(&unbounded),"value":"7"});
+        json!({"request_id":"xp2-measure-race","measurement_type_id":id(&unbounded),"value":7});
     let (a, b) = tokio::join!(
         pe.record_measurement(&manager, 1, run, &race),
         pe.record_measurement(&manager, 1, run, &race)
@@ -517,14 +525,18 @@ async fn main() -> Result<(), Error> {
                 .any(|r| id(r) == id(&kind)),
     )?;
     let before_replay = counts(&c).await?;
-    verify(
-        "measurement replay after retirement",
-        id(&pe
-            .record_measurement(&manager, 1, run, &measure("xp2-high", "4", Some(identity)))
-            .await?)
-            > 0
-            && counts(&c).await? == before_replay,
+    refusal(
+        "measurement replay validates retired type",
+        pe.record_measurement(&manager, 1, run, &measure("xp2-high", "4", Some(identity)))
+            .await,
+        "Measurement type inactive",
     )?;
+    verify(
+        "retired replay writes nothing",
+        counts(&c).await? == before_replay,
+    )?;
+    pe.update_measurement_type(&manager, 1, id(&kind), &json!({"active":true}))
+        .await?;
     refusal(
         "measurement conflicting replay",
         pe.record_measurement(&manager, 1, run, &measure("xp2-high", "3", Some(identity)))
@@ -636,6 +648,14 @@ async fn main() -> Result<(), Error> {
         .await?;
     let short=pe.correct_labour(&admin,1,id(&worked),&json!({"request_id":"xp2-short","correction_reason":"time corrected","stopped_at":"2026-01-01T01:15:00Z"})).await?;
     let retained=pe.correct_labour(&admin,1,id(&short),&json!({"request_id":"xp2-retain-stop","correction_reason":"note corrected","note":"retained"})).await?;
+    refusal("nonfinite correction start",pe.correct_labour(&admin,1,id(&retained),&json!({"request_id":"xp2-nonfinite","correction_reason":"bad start","started_at":"-infinity","stopped_at":null})).await,"Invalid labour times")?;
+    refusal("relative correction time",pe.correct_labour(&admin,1,id(&retained),&json!({"request_id":"xp2-relative","correction_reason":"bad start","started_at":"yesterday","stopped_at":null})).await,"Invalid labour times")?;
+    let before_replay = counts(&c).await?;
+    let replay=pe.correct_labour(&admin,1,id(&short),&json!({"request_id":"xp2-retain-stop","correction_reason":"note corrected","note":"retained","role_id":id(&role),"stopped_at":retained["stopped_at"]})).await?;
+    verify(
+        "correction defaults normalize before replay",
+        id(&replay) == id(&retained) && counts(&c).await? == before_replay,
+    )?;
     verify(
         "omitted stop retained; summary excludes predecessors",
         retained["seconds"] == 900

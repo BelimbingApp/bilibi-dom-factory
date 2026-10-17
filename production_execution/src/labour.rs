@@ -104,33 +104,6 @@ impl ProductionExecution {
         };
         let recorder = self.capture_authorize(scope, company, cap).await?;
         let request = capture::request(attrs)?.to_owned();
-        let mut intent = capture::intent(
-            attrs,
-            &[
-                "request_id",
-                "worker_user_id",
-                "role_id",
-                "execution_id",
-                "note",
-                "started_at",
-                "stopped_at",
-                "correction_reason",
-            ],
-        )?;
-        if intent.get("note").is_some() {
-            intent["note"] = capture::text(attrs, "note", false, "Invalid note")?;
-        }
-        if correction.is_some() {
-            intent["correction_reason"] = capture::text(
-                attrs,
-                "correction_reason",
-                true,
-                "Correction reason required",
-            )?;
-        }
-        if correction.is_none() {
-            intent["worker_user_id"] = json!(worker);
-        }
         let mut c = self.db.get().await.map_err(bilibi_database::Error::from)?;
         let mut tx = self
             .mutations
@@ -147,11 +120,8 @@ impl ProductionExecution {
             .await?;
         let result=async{
             capture::writable(tx.sql(),scope,company,cap).await?;
-            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"labour_correction"}else if clock{"clock_in"}else{"labour"},target,&intent).await?;
-            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Labour,&request,&fp).await?{return Ok((v,false));}
             let mut row=if let Some(id)=correction{
-                let old=capture::get(tx.sql(),scope,company,Table::Labour,id).await?;
-                if !old["corrected_by_id"].is_null(){return Err(Error::Capture("Labour entry corrected"));}old
+                capture::get(tx.sql(),scope,company,Table::Labour,id).await?
             }else{
                 orders::get_order(tx.sql(),scope,company,target).await?;
                 bilibi_user::company_accounts::get(tx.sql(),scope,company,worker).await.map_err(|_|Error::Capture("Worker not found"))?;
@@ -179,6 +149,15 @@ impl ProductionExecution {
                     }
                 }
             }
+            if correction.is_none() || attrs.get("note").is_some(){row["note"]=capture::text(attrs,"note",false,"Invalid note")?;}
+            row["request_id"]=json!(request);row["corrects_id"]=json!(correction);
+            row["correction_reason"]=if correction.is_some(){capture::text(attrs,"correction_reason",true,"Correction reason required")?}else{Value::Null};
+            let mut command=capture::intent(&row,&["request_id","order_id","worker_user_id","role_id","note","corrects_id","correction_reason","started_at","stopped_at"])?;
+            command["execution_id"]=row["execution_id"].clone();
+            if clock{command["started_at"]=Value::Null;}
+            let fp=capture::fingerprint(tx.sql(),if correction.is_some(){"labour_correction"}else if clock{"clock_in"}else{"labour"},target,&command).await?;
+            if let Some(v)=capture::replay(tx.sql(),scope,company,Table::Labour,&request,&fp).await?{return Ok((v,false));}
+            if !row["corrected_by_id"].is_null(){return Err(Error::Capture("Labour entry corrected"));}
             let worker=capture::id(&row,"worker_user_id")?;
             let start=row["started_at"].as_str().ok_or(Error::Capture("Invalid labour times"))?;
             let stop=row["stopped_at"].as_str();
@@ -188,8 +167,7 @@ impl ProductionExecution {
             let conflict=tx.sql().query_opt("SELECT e.stopped_at IS NULL FROM factory_labour_entries e WHERE e.tenant_id=$1 AND e.company_id=$2 AND e.worker_user_id=$3 AND ($4::bigint IS NULL OR e.id<>$4) AND NOT EXISTS(SELECT 1 FROM factory_labour_entries n WHERE n.tenant_id=e.tenant_id AND n.company_id=e.company_id AND n.corrects_id=e.id) AND (($6::text IS NULL AND e.stopped_at IS NULL) OR (e.started_at<COALESCE($6::text::timestamptz,clock_timestamp()) AND COALESCE(e.stopped_at,clock_timestamp())>$5::text::timestamptz)) ORDER BY e.id LIMIT 1",&[&scope.tenant(),&company,&worker,&correction,&start,&stop]).await?;
             if let Some(conflict)=conflict{return Err(Error::Capture(if stop.is_none() && conflict.get::<_,bool>(0){"Worker already clocked in"}else{"Labour overlap"}));}
             let closed=stop.is_some();
-            if correction.is_none() || attrs.get("note").is_some(){row["note"]=capture::text(attrs,"note",false,"Invalid note")?;}
-            row["request_id"]=json!(request);row["request_fingerprint"]=json!(fp);row["corrects_id"]=json!(correction);row["correction_reason"]=intent["correction_reason"].clone();
+            row["request_fingerprint"]=json!(fp);
             for (stopper,recorded) in [("stopped_by_type","recorded_by_type"),("stopped_by_id","recorded_by_id"),("stopped_by_acting_for_user_id","recorded_by_acting_for_user_id")]{row[stopper]=if closed{recorder[recorded].clone()}else{Value::Null};}
             capture::merge(&mut row,recorder);
             Ok((capture::insert(&mut tx,scope,company,Table::Labour,row).await?,true))
@@ -197,7 +175,8 @@ impl ProductionExecution {
         capture::finish(tx, result).await
     }
     pub async fn clock_out(&self, scope: &Scope, company: i64, entry: i64) -> Result<Value> {
-        let c = self.read_client(scope, company).await?;
+        capture::recorded(scope, company)?;
+        let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
         let old = capture::get(&**c, scope, company, Table::Labour, entry).await?;
         drop(c);
         let cap = capability(scope, capture::id(&old, "worker_user_id")?);
