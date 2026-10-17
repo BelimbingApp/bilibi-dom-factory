@@ -29,7 +29,7 @@ pub(crate) struct Pages {
 enum Screen {
     Types(types::Types),
     Resources(resources::Resources),
-    Definitions(definitions::Definitions),
+    Definitions(Box<definitions::Definitions>),
 }
 
 impl Screen {
@@ -37,7 +37,9 @@ impl Screen {
         match operation {
             "resource-types" => Ok(Self::Types(types::Types::new(pages)?)),
             "resources" => Ok(Self::Resources(resources::Resources::new(pages)?)),
-            "definitions" => Ok(Self::Definitions(definitions::Definitions::new(pages)?)),
+            "definitions" => Ok(Self::Definitions(Box::new(definitions::Definitions::new(
+                pages,
+            )?))),
             _ => Err(Error::NotFound),
         }
     }
