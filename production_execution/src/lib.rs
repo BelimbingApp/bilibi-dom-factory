@@ -20,6 +20,7 @@ mod model;
 mod orders;
 mod outcomes;
 mod wastage;
+mod web;
 pub use error::Error;
 pub use model::{
     Approver, Completion, Execution, HoldOverride, HoldOverrideRequest, NewOrder, Order, OrderKind,
@@ -27,6 +28,7 @@ pub use model::{
 };
 pub use outcomes::{ProductionTrace, RunYield, TraceOrder, TraceRun, UnitYield, YieldBalance};
 
+const PAGES: &str = "factory/production_execution.pages";
 pub const SERVICE: &str = "factory/production_execution.production_execution";
 type Result<T> = std::result::Result<T, Error>;
 
@@ -235,7 +237,7 @@ impl ProductionExecution {
 
 inventory::submit! { Module {
     id: "factory/production_execution", layer: Layer::Domains,
-    dependencies: &["base/authz","base/database","base/module_registry","base/tenancy","core/company","core/user","factory/inventory","factory/product_definition"],
+    dependencies: &["base/authz","base/database","base/datetime","base/locale","base/menu","base/module_registry","base/tenancy","base/ui","core/company","core/user","factory/inventory","factory/product_definition"],
     migrations: &[("factory-production-execution-001-orders-executions",include_str!("../migrations/001-orders-executions.sql")),
         ("factory-production-execution-002-shop-floor-capture",include_str!("../migrations/002-shop-floor-capture.sql"))],
     services: &[Service { id:SERVICE, factory: |services| {
@@ -249,5 +251,11 @@ inventory::submit! { Module {
             product_definition: product_definition.clone(),
             completer: completion::Completer { db, mutations, inventory, product_definition },
         }))
-    } }],
+    } }, Service { id:PAGES, factory: |services| Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(Arc::new(web::Pages {
+        db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
+        execution: services.get(SERVICE)?,
+        inventory: services.get(bilibi_factory_inventory::SERVICE)?,
+        display: services.get("base/datetime.display")?,
+        locales: services.get("base/locale.locales")?,
+    })))) }],
 } }
