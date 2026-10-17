@@ -13,6 +13,7 @@ bilibi-locale.workspace = true
 bilibi-menu.workspace = true
 bilibi-ui.workspace = true
 jiff = "0.2.38"
+bilibi-agent-api.workspace = true
 bilibi-authz.workspace = true
 bilibi-company.workspace = true
 bilibi-database.workspace = true

@@ -303,13 +303,18 @@ impl Completer {
 
     /// Authorizes an import against the order's company, before anything is
     /// posted. A live completion needs no import grant.
-    async fn authorize_import(&self, scope: &Scope, company: i64, source: Source) -> Result<()> {
+    async fn authorize_import(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        source: Source,
+    ) -> Result<()> {
         if source == Source::Live {
             return Ok(());
         }
-        let client = self.read_client().await?;
         match bilibi_company::organisation::authorize_target(
-            &**client,
+            client,
             scope,
             company,
             crate::contributions::IMPORT,
@@ -326,12 +331,12 @@ impl Completer {
     /// transaction, so a refused attempt keeps its decision log.
     async fn check_holds(
         &self,
+        client: &impl tokio_postgres::GenericClient,
         scope: &Scope,
         company: i64,
         request: &Request,
     ) -> Result<Vec<Applied>> {
-        let client = self.read_client().await?;
-        if orders::recorded(&**client, scope, company, &request.request_id).await? {
+        if orders::recorded(client, scope, company, &request.request_id).await? {
             return Ok(Vec::new());
         }
         let mut seen = HashSet::new();
@@ -342,7 +347,7 @@ impl Completer {
                 continue;
             }
             if let Some(override_) = self
-                .check_hold(scope, company, request, line, *hours)
+                .check_hold(client, scope, company, request, line, *hours)
                 .await?
             {
                 applied.push(override_);
@@ -353,6 +358,7 @@ impl Completer {
 
     async fn check_hold(
         &self,
+        client: &impl tokio_postgres::GenericClient,
         scope: &Scope,
         company: i64,
         request: &Request,
@@ -365,7 +371,7 @@ impl Completer {
         // capability or database fault is reported as it is.
         let identity = match self
             .inventory
-            .get_identity(scope, company, identity_id)
+            .get_identity_on(client, scope, company, identity_id)
             .await
         {
             Ok(identity) => identity,
@@ -377,7 +383,7 @@ impl Completer {
         }
         let source = match self
             .inventory
-            .get_transaction(scope, company, identity.source_transaction_id)
+            .get_transaction_on(client, scope, company, identity.source_transaction_id)
             .await
         {
             Ok(source) => source,
@@ -403,14 +409,8 @@ impl Completer {
             return Ok(None);
         }
         let override_ = request.hold_override.as_ref().ok_or(Error::MaterialHeld)?;
-        let client = self.read_client().await?;
-        match bilibi_company::organisation::authorize_target(
-            &**client,
-            scope,
-            company,
-            HOLD_OVERRIDE,
-        )
-        .await
+        match bilibi_company::organisation::authorize_target(client, scope, company, HOLD_OVERRIDE)
+            .await
         {
             Ok(_) => Ok(Some(Applied {
                 approver: override_.approver.clone(),
@@ -483,39 +483,23 @@ impl Completer {
         source: Source,
         completion: &Completion,
     ) -> Result<crate::Execution> {
-        self.authorize_import(scope, company, source).await?;
-        let (order, selected) = {
+        // Preserve durable refusal decisions before opening the write
+        // transaction. Nothing from this preflight authorizes that write.
+        {
             let client = self.read_client().await?;
-            bilibi_authz::authorize_key(&**client, scope, crate::contributions::FLOOR_VIEW).await?;
-            bilibi_company::organisation::require_live(&**client, scope, company).await?;
-            let order = orders::get_order(&**client, scope, company, order_id).await?;
-            let selected = self
-                .product_definition
-                .select_revisions(
-                    scope,
-                    company,
-                    order.product_id,
-                    order.formula_version,
-                    order.routing_version,
-                )
+            let (_, request) = self
+                .prepare(&**client, scope, company, order_id, source, completion)
                 .await?;
-            (order, selected)
-        };
-        let (request, resource) = validate(scope, &selected, source, completion)?;
-        if let Some(resource) = resource {
-            self.product_definition
-                .get_resource(scope, company, resource)
+            self.check_holds(&**client, scope, company, &request)
                 .await?;
         }
-        let overrides = self.check_holds(scope, company, &request).await?;
-
         let mut client = self.db.get().await.map_err(bilibi_database::Error::from)?;
         let mut tx = self
             .mutations
             .begin(&mut client, scope.mutation_context(ACTION))
             .await?;
         let result = self
-            .commit(&mut tx, scope, company, &order, &request, &overrides)
+            .complete_on(&mut tx, scope, company, order_id, source, completion)
             .await;
         match result {
             Ok((execution, true)) => {
@@ -532,6 +516,62 @@ impl Completer {
                 Err(error)
             }
         }
+    }
+
+    async fn prepare(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        order_id: i64,
+        source: Source,
+        completion: &Completion,
+    ) -> Result<(Order, Request)> {
+        self.authorize_import(client, scope, company, source)
+            .await?;
+        bilibi_authz::authorize_key(client, scope, crate::contributions::FLOOR_VIEW).await?;
+        bilibi_company::organisation::require_live(client, scope, company).await?;
+        let order = orders::get_order(client, scope, company, order_id).await?;
+        let selected = self
+            .product_definition
+            .select_revisions_on(
+                client,
+                scope,
+                company,
+                order.product_id,
+                order.formula_version,
+                order.routing_version,
+            )
+            .await?;
+        let (request, resource) = validate(scope, &selected, source, completion)?;
+        if let Some(resource) = resource {
+            self.product_definition
+                .get_resource_on(client, scope, company, resource)
+                .await?;
+        }
+        Ok((order, request))
+    }
+
+    /// The single owner path for facade, agent preview and plan commit. It
+    /// owns no transaction lifecycle and reacquires all authorization and
+    /// hold facts on the caller's connection under the writable-company lock.
+    pub(crate) async fn complete_on(
+        &self,
+        tx: &mut bilibi_database::MutationTransaction<'_>,
+        scope: &Scope,
+        company: i64,
+        order_id: i64,
+        source: Source,
+        completion: &Completion,
+    ) -> Result<(crate::Execution, bool)> {
+        bilibi_company::organisation::authorize_target(tx.sql(), scope, company, MANAGE).await?;
+        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
+        let (order, request) = self
+            .prepare(tx.sql(), scope, company, order_id, source, completion)
+            .await?;
+        let overrides = self.check_holds(tx.sql(), scope, company, &request).await?;
+        self.commit(tx, scope, company, &order, &request, &overrides)
+            .await
     }
 
     /// The execution, and whether this call recorded it (`false` for an

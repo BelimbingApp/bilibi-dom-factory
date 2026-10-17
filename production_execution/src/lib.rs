@@ -9,6 +9,7 @@ use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_tenancy::Scope;
 use std::sync::Arc;
 
+mod agent_operations;
 mod capture;
 mod codes;
 mod completion;
@@ -66,8 +67,44 @@ impl ProductionExecution {
     /// validated through Product Definition and retained on the order and
     /// every execution.
     pub async fn create_order(&self, scope: &Scope, company: i64, new: &NewOrder) -> Result<Order> {
+        let mut client = self.db.get().await.map_err(bilibi_database::Error::from)?;
+        let mut tx = self
+            .mutations
+            .begin(
+                &mut client,
+                scope.mutation_context("factory.production_execution.create_order"),
+            )
+            .await?;
+        match self.create_order_on(&mut tx, scope, company, new).await {
+            Ok(order) => {
+                tx.commit().await?;
+                Ok(order)
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
+    }
+
+    async fn create_order_on(
+        &self,
+        tx: &mut bilibi_database::MutationTransaction<'_>,
+        scope: &Scope,
+        company: i64,
+        new: &NewOrder,
+    ) -> Result<Order> {
+        bilibi_company::organisation::authorize_target(
+            tx.sql(),
+            scope,
+            company,
+            contributions::MANAGE,
+        )
+        .await?;
+        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
         self.product_definition
-            .select_revisions(
+            .select_revisions_on(
+                tx.sql(),
                 scope,
                 company,
                 new.product_id,
@@ -89,24 +126,7 @@ impl ProductionExecution {
         {
             return Err(field("Demand ref", "should be at most 255 character(s)"));
         }
-        let mut client = self.db.get().await.map_err(bilibi_database::Error::from)?;
-        let mut tx = self
-            .mutations
-            .begin(
-                &mut client,
-                scope.mutation_context("factory.production_execution.create_order"),
-            )
-            .await?;
-        let created = async {
-            bilibi_company::organisation::authorize_target(
-                tx.sql(),
-                scope,
-                company,
-                contributions::MANAGE,
-            )
-            .await?;
-            bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
-            if tx
+        if tx
                 .sql()
                 .query_opt(
                     "SELECT 1 FROM factory_production_orders WHERE tenant_id=$1 AND company_id=$2 AND code=$3",
@@ -117,9 +137,9 @@ impl ProductionExecution {
             {
                 return Err(field("Code", "has already been taken"));
             }
-            let tenant = scope.tenant();
-            let new = new.clone();
-            let id = tx
+        let tenant = scope.tenant();
+        let new = new.clone();
+        let id = tx
                 .mutate(|sql| {
                     Box::pin(async move {
                         let row = sql
@@ -141,19 +161,7 @@ impl ProductionExecution {
                     })
                 })
                 .await?;
-            orders::get_order(tx.sql(), scope, company, id).await
-        }
-        .await;
-        match created {
-            Ok(order) => {
-                tx.commit().await?;
-                Ok(order)
-            }
-            Err(error) => {
-                tx.rollback().await?;
-                Err(error)
-            }
-        }
+        orders::get_order(tx.sql(), scope, company, id).await
     }
 
     pub async fn get_order(&self, scope: &Scope, company: i64, order_id: i64) -> Result<Order> {
@@ -237,7 +245,7 @@ impl ProductionExecution {
 
 inventory::submit! { Module {
     id: "factory/production_execution", layer: Layer::Domains,
-    dependencies: &["base/authz","base/database","base/datetime","base/locale","base/menu","base/module_registry","base/tenancy","base/ui","core/company","core/user","factory/inventory","factory/product_definition"],
+    dependencies: &["base/agent_api","base/authz","base/database","base/datetime","base/locale","base/menu","base/module_registry","base/tenancy","base/ui","core/company","core/user","factory/inventory","factory/product_definition"],
     migrations: &[("factory-production-execution-001-orders-executions",include_str!("../migrations/001-orders-executions.sql")),
         ("factory-production-execution-002-shop-floor-capture",include_str!("../migrations/002-shop-floor-capture.sql"))],
     services: &[Service { id:SERVICE, factory: |services| {
@@ -245,12 +253,14 @@ inventory::submit! { Module {
         let mutations: Arc<MutationBoundary> = services.get("base/database.mutations")?;
         let inventory: Arc<Inventory> = services.get(bilibi_factory_inventory::SERVICE)?;
         let product_definition: Arc<ProductDefinition> = services.get(bilibi_factory_product_definition::SERVICE)?;
-        Ok(Arc::new(ProductionExecution {
+        let owner = Arc::new(ProductionExecution {
             db: db.clone(),
             mutations: mutations.clone(),
             product_definition: product_definition.clone(),
             completer: completion::Completer { db, mutations, inventory, product_definition },
-        }))
+        });
+        agent_operations::bind(owner.clone())?;
+        Ok(owner)
     } }, Service { id:PAGES, factory: |services| Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(Arc::new(web::Pages {
         db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
         execution: services.get(SERVICE)?,

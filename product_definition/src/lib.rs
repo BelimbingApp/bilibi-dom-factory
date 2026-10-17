@@ -250,6 +250,18 @@ impl ProductDefinition {
     pub async fn get_resource(&self, scope: &Scope, company: i64, id: i64) -> Result<Resource> {
         self.get(scope, company, Kind::Resource, id).await
     }
+    /// Scoped resource read on a sibling's mutation connection.
+    pub async fn get_resource_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        id: i64,
+    ) -> Result<Resource> {
+        bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
+        bilibi_company::organisation::require_live(client, scope, company).await?;
+        store::fetch(client, scope, company, Kind::Resource, id).await
+    }
     pub async fn list_resources(
         &self,
         scope: &Scope,
@@ -352,10 +364,32 @@ impl ProductDefinition {
         routing_version: i32,
     ) -> Result<SelectedRevisions> {
         let client = self.read_client(scope, company).await?;
-        let product: Product =
-            store::fetch(&**client, scope, company, Kind::Product, product).await?;
-        let formula = store::revision(
+        self.select_revisions_on(
             &**client,
+            scope,
+            company,
+            product,
+            formula_version,
+            routing_version,
+        )
+        .await
+    }
+
+    /// Exact revisions on the caller's connection, including pending data.
+    pub async fn select_revisions_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        product: i64,
+        formula_version: i32,
+        routing_version: i32,
+    ) -> Result<SelectedRevisions> {
+        bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
+        bilibi_company::organisation::require_live(client, scope, company).await?;
+        let product: Product = store::fetch(client, scope, company, Kind::Product, product).await?;
+        let formula = store::revision(
+            client,
             scope,
             company,
             Kind::Formula,
@@ -364,7 +398,7 @@ impl ProductDefinition {
         )
         .await?;
         let routing = store::revision(
-            &**client,
+            client,
             scope,
             company,
             Kind::Routing,
