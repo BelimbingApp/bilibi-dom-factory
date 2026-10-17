@@ -76,3 +76,8 @@ path = "../../../../base/settings"
 [[bin]]
 name = "production-operations"
 path = "src/production_operations.rs"
+
+# XP4 labour/configuration page proof and browser host; run after floor-pages.
+[[bin]]
+name = "labour-pages"
+path = "src/labour_pages.rs"
