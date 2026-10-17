@@ -1,5 +1,5 @@
 //! Bilimbi.Factory.ProductDefinition: company resources, products and exact,
-//! immutable formula/routing revisions. Pages belong to the later XD2 slice.
+//! immutable formula/routing revisions, with their pages (`web`).
 use bilibi_database::{Db, MutationBoundary};
 use bilibi_factory_inventory::Inventory;
 use bilibi_module_registry::{Layer, Module, Service};
@@ -15,6 +15,7 @@ mod model;
 mod resources;
 mod revisions;
 mod store;
+mod web;
 pub use error::Error;
 pub use model::{
     FormulaLine, FormulaRevision, NewProduct, NewResource, NewResourceType, Operation, Product,
@@ -22,6 +23,7 @@ pub use model::{
 };
 
 pub const SERVICE: &str = "factory/product_definition.product_definition";
+const PAGES: &str = "factory/product_definition.pages";
 type Result<T> = std::result::Result<T, Error>;
 pub struct ProductDefinition {
     db: Db,
@@ -381,11 +383,18 @@ impl ProductDefinition {
 
 inventory::submit! { Module {
     id: "factory/product_definition", layer: Layer::Domains,
-    dependencies: &["base/authz","base/database","base/module_registry","base/tenancy","core/company","factory/inventory"],
+    dependencies: &["base/authz","base/database","base/menu","base/module_registry","base/tenancy","base/ui","core/company","factory/inventory"],
     migrations: &[("factory-product-definition-001-definitions",include_str!("../migrations/001-definitions.sql"))],
-    services: &[Service { id:SERVICE, factory: |services| Ok(Arc::new(ProductDefinition {
-        db:services.get::<Db>("base/database.pool")?.as_ref().clone(),
-        mutations:services.get("base/database.mutations")?,
-        inventory:services.get(bilibi_factory_inventory::SERVICE)?,
-    })) }],
+    services: &[
+        Service { id:SERVICE, factory: |services| Ok(Arc::new(ProductDefinition {
+            db:services.get::<Db>("base/database.pool")?.as_ref().clone(),
+            mutations:services.get("base/database.mutations")?,
+            inventory:services.get(bilibi_factory_inventory::SERVICE)?,
+        })) },
+        Service { id:PAGES, factory: |services| Ok(Arc::new(bilibi_ui::page::PageService::<bilibi_tenancy::Scope, bilibi_database::Error>(Arc::new(web::Pages {
+            db:services.get::<Db>("base/database.pool")?.as_ref().clone(),
+            definitions:services.get(SERVICE)?,
+            inventory:services.get(bilibi_factory_inventory::SERVICE)?,
+        })))) },
+    ],
 } }
