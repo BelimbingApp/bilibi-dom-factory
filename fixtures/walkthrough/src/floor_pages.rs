@@ -315,7 +315,8 @@ async fn main() -> Result<(), Error> {
     let body = event(&mut state, &manager, waste.clone()).await?;
     verify(
         "wastage recorded and escaped",
-        body.html.contains("Wastage recorded.") && body.html.contains("Page capture &lt;proof&gt;"),
+        body.html.contains("Wastage recorded.")
+            && body.html.contains("Page capture &#60;proof&#62;"),
     )?;
     event(&mut state, &manager, waste).await?;
     let records = pe.list_wastage(&manager, company, run).await?;
