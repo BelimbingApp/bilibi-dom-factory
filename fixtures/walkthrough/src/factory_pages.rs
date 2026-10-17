@@ -62,11 +62,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = bilibi_database::pool(&std::env::var("DATABASE_URL")?)?;
     bilibi_walkthrough_fixture::install(&db).await?;
     // The Platform fixture leaves the viewer unlinked. Affiliation is proof
-    // data only, matching the manager's company and the XD2 page host.
+    // data only, matching the manager's company. Allocate IDs so the floor
+    // walkthrough can still add its workers after an empty-state capture.
     db.get().await?.batch_execute(
-        "INSERT INTO persons(id,tenant_id,name,kind,email) VALUES(4,1,'Lee Viewer','human','lee@example.test') ON CONFLICT DO NOTHING;
-         INSERT INTO person_affiliations(id,tenant_id,person_id,organisation_id,title,work_email) VALUES(3,1,4,1,'Viewer','viewer@example.test') ON CONFLICT DO NOTHING;
-         UPDATE users SET person_id=4,affiliation_id=3,organisation_id=1 WHERE tenant_id=1 AND id=2 AND person_id IS NULL AND affiliation_id IS NULL;",
+        "WITH p AS (
+             INSERT INTO persons(tenant_id,name,kind,email)
+             SELECT tenant_id,name,'human',email FROM users
+             WHERE tenant_id=1 AND id=2 AND person_id IS NULL AND affiliation_id IS NULL
+             RETURNING id,tenant_id
+         ), a AS (
+             INSERT INTO person_affiliations(tenant_id,person_id,organisation_id)
+             SELECT tenant_id,id,1 FROM p RETURNING id,person_id,tenant_id,organisation_id
+         )
+         UPDATE users u SET person_id=a.person_id,affiliation_id=a.id,organisation_id=a.organisation_id
+         FROM a WHERE u.tenant_id=a.tenant_id AND u.id=2;",
     ).await?;
     let app = bilibi_web::App::new(db, &origin)?;
     app.services
