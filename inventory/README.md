@@ -6,8 +6,8 @@ menu and settings (slice X0), and behind one facade the units, stock
 locations and item settings (X0) and the item catalog: the item master,
 material types with property definitions, materials with a fixed native unit
 and immutable conversion versions (XI1). The Material Transaction ledger,
-genealogy, production posting authority and the pages follow in slices XI2 to
-XI4.
+genealogy and production posting authority follow in slices XI2 and XI3; the
+pages are XI4 (below).
 
 ## Owner contract
 
@@ -110,8 +110,30 @@ strings (the first is the default); a currency is three upper-case letters.
 
 The root `admin.factory` ("Factory", under Administration) and its items Units
 (`/factory/units`) and Materials (`/factory/materials`), each needing
-`factory.inventory.configuration.view`. The pages arrive in XI4; until then
-those two links have no page behind them.
+`factory.inventory.configuration.view`.
+
+## Pages
+
+Service `factory/inventory.pages`; every route needs
+`factory.inventory.configuration.view`, checked on each request and live event,
+and is framed-capable. Each page is a mounted state over the facade; every
+write-shaped event checks `…configuration.manage` again before the facade does,
+and the facade a third time.
+
+| Route | Operation | What it does |
+| --- | --- | --- |
+| `/factory/units` | `units` | list; New unit, Edit (name only; the code is fixed), Retire |
+| `/factory/material-types` | `material_types` | list; New type, Edit, Retire; property definitions are edited as JSON |
+| `/factory/materials` | `materials` | list; New material (item, native unit, type, JSON values), Edit, Retire |
+| `/factory/conversions` | `conversions` | materials table, then the picked material's versions table and the Publish conversion form |
+| `/factory/item-settings` | `item_settings` | the company's own statuses and default currency, beside the effective values |
+
+Lists are `FlexTable` over built-in `ListColumns` (column settings, drag
+reorder, row height, compact rows). Bilimbi's tables have no sort, filter or
+pager, so these have none. Bilimbi's `data-confirm` on Retire is a
+`ConfirmDialog` ("Retire this unit?", "…material type?", "…material?"). Flash
+and alert texts, element IDs and labels are Bilimbi's; an actor without a
+company reaches the facade's "Company not found".
 
 ## Schema
 

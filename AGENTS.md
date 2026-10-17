@@ -69,6 +69,10 @@ confirmations verbatim.
   with no `Change` as invalid.
 - Use `bilibi_company::organisation::{authorize_target, require_live,
   require_writable}` for the company, not `companies` SQL of your own.
+- A page is a mounted state in `inventory/src/pages` over the facade, never SQL
+  of its own: check `…configuration.manage` in the event before calling a
+  write, and name a form's submit event for its action (`save_unit`), because
+  `live.js` reserves `save`. Retire behind `ConfirmDialog`, never `data-confirm`.
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.
