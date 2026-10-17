@@ -53,10 +53,14 @@ confirmations verbatim.
   fixture carries one only as data. Read item statuses and the default currency
   through `Inventory::item_settings`, never from a constant.
 - For a property a company defines on its types, use `PropertyDefinition`
-  and `property::validate` in `inventory/src/property.rs` and store the
+  and Inventory's `normalize_property_definitions`/`validate_property_values`
+  facade (implemented in `inventory/src/property.rs`) and store the
   validated values on the typed row, as materials do; do not add a typed
   column or a second validator for one property, because the definitions are
   the company's and one mechanism keeps them behaving alike.
+- Read Inventory inside a sibling's mutation through `get_item_on`,
+  `get_material_on` and `get_unit_on`, not a second pool connection: this sees
+  pending data, retains authorization and avoids pool exhaustion under locks.
 - Do not hard-code what an operator could set (limits, scopes, codes,
   vocabularies): declare a Base setting with an editor, as `contributions.rs`
   does for `factory.inventory.item_statuses`.

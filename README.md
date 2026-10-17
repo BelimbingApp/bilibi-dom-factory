@@ -1,7 +1,7 @@
 # bilibi-dom-factory
 
 Factory Domain for [Bilibi](https://github.com/BelimbingApp/bilibi): Inventory,
-and in later slices Product Definition and Production Execution. It is one
+Product Definition, and in later slices Production Execution. It is one
 optional, independently versioned repository that a manufacturing adopter
 mounts into a Bilibi checkout; it does not build on its own. It is the Rust
 port of Bilimbi's [`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory),
@@ -10,7 +10,7 @@ with the same module IDs, capability keys, table names and wording.
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
 | [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); genealogy and pages follow |
-| `product_definition/` | `factory/product_definition` | `bilibi-factory-product-definition` | not yet ported |
+| [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); pages follow in XD2 |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
 Factory declares no dependency on any other Domain container, and no Domain
@@ -74,6 +74,14 @@ version preservation, weighed receipts, signed corrections, stock retirement,
 permission and company isolation, and PostgreSQL's append-only and deferred
 balance refusals. These facade-only operations have no pages in the reference;
 run the walkthrough to exercise them rather than following the XI4 menu links.
+
+For XD1, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin product-definition` from
+the same fixture folder. This binary checks its runtime outcomes and exits
+nonzero on unexpected results. It covers typed properties, publication and
+concurrent version allocation, exact selection, retirement, authorization,
+tenant/company isolation, SQL immutability and audit records. No Product
+Definition pages exist until XD2; the facade walkthrough is its runnable entry.
 
 ## License
 
