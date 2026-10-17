@@ -2,8 +2,8 @@
 //! settings, units of measure, stock locations, material types, material
 //! identity and versioned unit conversions behind one facade, [`Inventory`].
 //! Schema, SQL, validation and helpers stay private to this crate; later
-//! slices add the Material Transaction ledger and genealogy behind the same
-//! facade.
+//! slices add genealogy behind the same facade. The Material Transaction
+//! ledger records stock movements without changing earlier observations.
 //!
 //! Every operation takes the sealed [`Scope`] and a company ID. A read needs
 //! its view capability (`factory.inventory.configuration.view`, or
@@ -25,6 +25,8 @@ mod contributions;
 mod conversions;
 mod error;
 mod items;
+mod ledger;
+mod ledger_request;
 mod locations;
 mod material_types;
 mod materials;
@@ -35,6 +37,9 @@ mod units;
 pub use conversions::Conversion;
 pub use error::{Error, FieldError};
 pub use items::{Item, ItemUpdate, NewItem};
+pub use ledger::{Entry, MaterialTransaction, StockPosition};
+use ledger_request::TransactionKind;
+pub use ledger_request::{Observation, PostingRequest, ReceiptMeasurement, StockLine};
 pub use locations::{Location, NewLocation};
 pub use material_types::{MaterialType, MaterialTypeUpdate, NewMaterialType};
 pub use materials::{Material, MaterialTyping};
@@ -97,6 +102,116 @@ macro_rules! audited {
 }
 
 impl Inventory {
+    /// Receives stock with source evidence and an optional weigh ticket.
+    pub async fn record_receipt(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        audited!(self, scope, "factory.inventory.record_receipt", |tx| {
+            ledger::post(
+                &mut tx,
+                scope,
+                company_id,
+                TransactionKind::Receipt,
+                request,
+            )
+            .await
+        })
+    }
+
+    /// Moves stock between distinct locations, preserving its recorded basis.
+    pub async fn record_transfer(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        audited!(self, scope, "factory.inventory.record_transfer", |tx| {
+            ledger::post(
+                &mut tx,
+                scope,
+                company_id,
+                TransactionKind::Transfer,
+                request,
+            )
+            .await
+        })
+    }
+
+    /// Draws stock under locks; concurrent requests cannot spend it twice.
+    pub async fn record_consumption(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        audited!(self, scope, "factory.inventory.record_consumption", |tx| {
+            ledger::post(
+                &mut tx,
+                scope,
+                company_id,
+                TransactionKind::Consumption,
+                request,
+            )
+            .await
+        })
+    }
+
+    /// Appends signed adjustments with a reason and an original transaction.
+    /// Corrections may adjust a retired material; ordinary postings may not.
+    pub async fn record_correction(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        audited!(self, scope, "factory.inventory.record_correction", |tx| {
+            ledger::post(
+                &mut tx,
+                scope,
+                company_id,
+                TransactionKind::Correction,
+                request,
+            )
+            .await
+        })
+    }
+
+    pub async fn get_transaction(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        transaction_id: i64,
+    ) -> Result<MaterialTransaction> {
+        connection!(self, client);
+        ledger::get(client, scope, company_id, transaction_id).await
+    }
+
+    /// Most recent IDs first, optionally containing one item (100, at most 500).
+    pub async fn list_transactions(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<MaterialTransaction>> {
+        connection!(self, client);
+        ledger::list(client, scope, company_id, item_id, limit).await
+    }
+
+    pub async fn get_stock_position(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        location_id: i64,
+    ) -> Result<StockPosition> {
+        connection!(self, client);
+        ledger::position(client, scope, company_id, item_id, location_id).await
+    }
+
     /// The company's item settings: its own overrides, else its tenant's.
     pub async fn item_settings(&self, scope: &Scope, company_id: i64) -> Result<ItemSettings> {
         connection!(self, client);
@@ -469,6 +584,10 @@ inventory::submit! {
             (
                 "factory-inventory-002-catalog",
                 include_str!("../migrations/002-catalog.sql"),
+            ),
+            (
+                "factory-inventory-003-ledger",
+                include_str!("../migrations/003-ledger.sql"),
             ),
         ],
         services: &[Service {

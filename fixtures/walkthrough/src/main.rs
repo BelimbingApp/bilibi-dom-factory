@@ -16,6 +16,8 @@ use bilibi_factory_inventory::{
 use bilibi_tenancy::Scope;
 use std::fmt::Debug;
 
+mod ledger;
+
 bilibi_walkthrough_fixture::walkthrough_vocabulary!();
 bilibi_walkthrough_fixture::walkthrough_module_roles!();
 
@@ -85,7 +87,12 @@ async fn main() -> Result<(), Error> {
         .batch_execute(
             // Conversion versions are append-only; only this disposable reset
             // lifts the trigger to start again.
-            "ALTER TABLE factory_inventory_unit_conversions DISABLE TRIGGER factory_inventory_unit_conversions_append_only;
+            "ALTER TABLE factory_inventory_transactions DISABLE TRIGGER factory_inventory_transactions_no_truncate;
+             ALTER TABLE factory_inventory_transaction_entries DISABLE TRIGGER factory_inventory_entries_no_truncate;
+             TRUNCATE factory_inventory_transactions,factory_inventory_transaction_entries;
+             ALTER TABLE factory_inventory_transactions ENABLE TRIGGER factory_inventory_transactions_no_truncate;
+             ALTER TABLE factory_inventory_transaction_entries ENABLE TRIGGER factory_inventory_entries_no_truncate;
+             ALTER TABLE factory_inventory_unit_conversions DISABLE TRIGGER factory_inventory_unit_conversions_append_only;
              DELETE FROM factory_inventory_unit_conversions;
              ALTER TABLE factory_inventory_unit_conversions ENABLE TRIGGER factory_inventory_unit_conversions_append_only;
              DELETE FROM factory_inventory_materials; DELETE FROM commerce_inventory_items;
@@ -888,6 +895,8 @@ async fn main() -> Result<(), Error> {
     ] {
         refused(sql, client.execute(sql, &[]).await);
     }
+    ledger::run(&inventory, &db, &manager, &viewer, &staff, &other).await?;
+
     println!("== the audited changes");
     for row in client
         .query(
