@@ -343,11 +343,6 @@ pub(crate) async fn update(
 }
 
 /// Retires a material, preserving its posting history.
-///
-/// TODO(XI2): refuse `material_has_stock` ("Material has stock") while the
-/// Material Transaction ledger holds a non-zero balance for it; the ledger
-/// arrives with XI2, in this module, and the check belongs here under the
-/// same row lock. Until then no material can hold stock.
 pub(crate) async fn retire(
     tx: &mut MutationTransaction<'_>,
     scope: &Scope,
@@ -358,6 +353,13 @@ pub(crate) async fn retire(
     let (id, before) = fetch(tx.sql(), scope, company_id, item_id, "FOR UPDATE").await?;
     if before.retired {
         return Err(Error::MaterialRetired);
+    }
+    let has_stock: bool = tx.sql().query_one(
+        "SELECT EXISTS(SELECT 1 FROM factory_inventory_transaction_entries WHERE tenant_id=$1 AND company_id=$2 AND material_id=$3 AND role='stock' GROUP BY location_id HAVING sum(native_quantity)<>0)",
+        &[&scope.tenant(), &company_id, &id],
+    ).await?.get(0);
+    if has_stock {
+        return Err(Error::MaterialHasStock);
     }
     Ok(tx
         .mutate(move |sql| {

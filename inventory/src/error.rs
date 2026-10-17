@@ -41,6 +41,16 @@ pub enum Error {
     MaterialNotFound,
     #[error("Material retired")]
     MaterialRetired,
+    #[error("Material has stock")]
+    MaterialHasStock,
+    #[error("Transaction not found")]
+    TransactionNotFound,
+    #[error("Request id conflict")]
+    RequestIdConflict,
+    #[error("Insufficient stock")]
+    InsufficientStock,
+    #[error("Unregistered posting authority")]
+    UnregisteredPostingAuthority,
     #[error("Conversion not found")]
     ConversionNotFound,
     #[error("Native unit")]
