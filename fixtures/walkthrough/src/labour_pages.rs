@@ -39,7 +39,7 @@ async fn mount(
     page: &PageService<Scope, DbError>,
     scope: &Scope,
     query: &HashMap<String, String>,
-    operation: &str,
+    operation: &'static str,
 ) -> Result<State, Error> {
     Ok(page
         .0

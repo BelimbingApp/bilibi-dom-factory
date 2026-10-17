@@ -419,11 +419,27 @@ impl Floor {
                     "run",
                     Cell::text(self.run_label(v["execution_id"].as_i64())),
                 )
-                .cell("start", self.time_cell(v, "started_at")?)
+                .slot(
+                    "start",
+                    self.instant(
+                        &format!("labour-{id}-start"),
+                        s::text(v, "started_at")
+                            .parse()
+                            .map_err(|_| Error::Invalid)?,
+                    )?,
+                )
                 .cell("time", Cell::text(duration(v["seconds"].as_i64())))
                 .cell("corrected", Cell::text(s::text(v, "correction_reason")));
             if !v["stopped_at"].is_null() {
-                row = row.cell("stop", self.time_cell(v, "stopped_at")?);
+                row = row.slot(
+                    "stop",
+                    self.instant(
+                        &format!("labour-{id}-stop"),
+                        s::text(v, "stopped_at")
+                            .parse()
+                            .map_err(|_| Error::Invalid)?,
+                    )?,
+                );
             }
             row.dom_id = Some(format!("labour-{id}"));
             if v["stopped_at"].is_null() && (manage || (record && v["worker_user_id"] == l.own)) {

@@ -157,7 +157,7 @@ impl Floor {
             .as_str()
             .to_string())
     }
-    fn instant(&self, id: &str, at: jiff::Timestamp) -> Result<Html> {
+    pub(super) fn instant(&self, id: &str, at: jiff::Timestamp) -> Result<Html> {
         s::render(s::InstantView {
             id,
             value: {
