@@ -88,6 +88,7 @@ pub(super) async fn run(
             &NewItem {
                 sku: "LEDGER-1".into(),
                 title: "Ledger material".into(),
+                currency_code: Some("MYR".into()),
                 ..Default::default()
             },
             unit.id,
@@ -102,6 +103,7 @@ pub(super) async fn run(
             &NewItem {
                 sku: "LEDGER-2".into(),
                 title: "Second ledger material".into(),
+                currency_code: Some("MYR".into()),
                 ..Default::default()
             },
             alternate.id,
@@ -278,6 +280,16 @@ pub(super) async fn run(
         "viewer cannot post (even a replay)",
         inventory.record_receipt(viewer, 1, &receipt).await,
     );
+    client.execute("INSERT INTO principal_capabilities(tenant_id,user_id,capability,is_allowed) VALUES($1,$2,'factory.inventory.configuration.manage',false)", &[&manager.tenant(),&manager.user()]).await?;
+    refused(
+        "revoked grant on existing scope refuses replay",
+        inventory.record_receipt(manager, 1, &receipt).await,
+    );
+    client.execute("DELETE FROM principal_capabilities WHERE tenant_id=$1 AND user_id=$2 AND capability='factory.inventory.configuration.manage'", &[&manager.tenant(),&manager.user()]).await?;
+    show(
+        "restored grant on same scope replays",
+        inventory.record_receipt(manager, 1, &receipt).await?.id,
+    );
     refused(
         "staff cannot read",
         inventory.get_transaction(staff, 1, received.id).await,
@@ -356,7 +368,41 @@ pub(super) async fn run(
         inventory.record_correction(manager, 1, &correction).await?,
     );
 
+    let maximum: Decimal = "999999999999.999999999999".parse()?;
+    inventory
+        .define_conversion(manager, 1, second, unit.id, maximum)
+        .await?;
+    let mut precise = request("wide-native", vec![line(second, a, 1)]);
+    precise.lines[0].unit_id = Some(unit.id);
+    precise.lines[0].quantity = maximum;
+    show(
+        "36-digit native quantity stays exact",
+        inventory
+            .record_receipt(manager, 1, &precise)
+            .await?
+            .entries[0]
+            .native_quantity
+            .clone(),
+    );
+
+    // An audit failure must roll back the header and every entry, not merely
+    // return an error after stock has changed. This trigger is fixture-only.
+    client.batch_execute("CREATE FUNCTION xi2_refuse_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.auditable_type='factory_inventory_transaction_entries' THEN RAISE EXCEPTION 'XI2 audit failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER xi2_refuse_audit BEFORE INSERT ON base_audit_mutations FOR EACH ROW EXECUTE FUNCTION xi2_refuse_audit()").await?;
+    refused(
+        "audit failure rolls back posting",
+        inventory
+            .record_receipt(
+                manager,
+                1,
+                &request("audit-failure", vec![line(second, b, 1)]),
+            )
+            .await,
+    );
+    client.batch_execute("DROP TRIGGER xi2_refuse_audit ON base_audit_mutations; DROP FUNCTION xi2_refuse_audit()").await?;
+    show("audit-failure transaction count: 0",client.query_one("SELECT count(*) FROM factory_inventory_transactions WHERE request_id='audit-failure'", &[]).await?.get::<_,i64>(0));
+
     println!("== ledger database backstops");
+    refused("zero overall but unbalanced per unit",client.execute("WITH t AS (INSERT INTO factory_inventory_transactions(tenant_id,company_id,kind,request_id,request_fingerprint,actor_type,actor_id,evidence,effective_at,recorded_at) VALUES(1,1,'transform','per-unit','x','user',1,'proof',now(),now()) RETURNING id) INSERT INTO factory_inventory_transaction_entries(tenant_id,company_id,transaction_id,role,native_quantity,native_unit_id,evidence,reconciliation_basis) SELECT 1,1,t.id,'variance',v.quantity,v.unit,'proof','proof' FROM t CROSS JOIN (VALUES($1::bigint,1),($2::bigint,-1)) AS v(unit,quantity)",&[&unit.id,&alternate.id]).await);
     for sql in [
         "UPDATE factory_inventory_transactions SET evidence='changed'",
         "DELETE FROM factory_inventory_transactions",

@@ -5,9 +5,9 @@ Factory Inventory (`bilibi-factory-inventory`), ported from Bilimbi's
 menu and settings (slice X0), and behind one facade the units, stock
 locations and item settings (X0) and the item catalog: the item master,
 material types with property definitions, materials with a fixed native unit
-and immutable conversion versions (XI1). The Material Transaction ledger,
-genealogy, production posting authority and the pages follow in slices XI2 to
-XI4.
+and immutable conversion versions (XI1), and the Material Transaction ledger
+(XI2). Genealogy, production posting authority and the pages follow in XI3
+and XI4.
 
 ## Owner contract
 
@@ -35,6 +35,8 @@ and a company ID; the company must be live and inside the scope's tenant.
 | `retire_material` | `…configuration.manage` | keeps its history readable |
 | `define_conversion` | `…configuration.manage` | the next version of one unit's factor to the native unit |
 | `list_conversions`, `get_conversion` | `…configuration.view` | every version by unit code then version; the current one, or a named version |
+| `record_receipt`, `record_transfer`, `record_consumption`, `record_correction` | `…configuration.manage` | append-only, audited, idempotent postings; actors come from `Scope` |
+| `get_transaction`, `list_transactions`, `get_stock_position` | `…configuration.view` | transaction entries and current stock; lists newest ID first, optionally by item, default 100 / maximum 500 |
 
 A write also needs the company as an authorized target (the actor's own
 company, or `admin.company.tenant-wide.manage`) and a company that is not
@@ -79,8 +81,62 @@ taken", "Invalid item statuses", "Material type in use").
   takes no new material or conversion, and a unit that is an active
   material's native unit cannot retire ("Unit in use"). A retired type takes
   no edit and no new material. A retired material takes no update and will
-  refuse new postings; retiring one that holds stock is refused once the
-  ledger arrives (XI2).
+  refuse new postings. Retirement refuses any non-zero stock position;
+  corrections may still adjust a retired material, as in Bilimbi.
+
+## Material Transaction ledger
+
+`PostingRequest` carries a company-unique `request_id`, source `evidence`,
+optional `effective_at`, optional opaque `context`, and non-empty `lines`.
+Use `StockLine` with an item, location, quantity and `Observation` (`Measured`,
+`Declared`, `Counted`, `Derived`). A transfer uses `from_location_id` and
+`to_location_id` instead. Corrections need `corrects_transaction_id` and
+`reason`; their quantities are signed adjustments, while other postings
+require positive quantities. The original transaction never changes.
+
+- **Recorded and native quantities.** A quantity accepts at most 12 decimal
+  places and 12 integer digits. An optional `unit_id` uses the latest
+  conversion, or `conversion_version` pins an earlier one. Each stock entry
+  retains the observed quantity, unit and conversion ID/version. Native
+  quantities are computed and rounded to 12 places in PostgreSQL. They and
+  stock-position totals are **exact decimal strings** in read models:
+  `numeric(36,12)` exceeds `rust_decimal`'s 96-bit mantissa. Do not parse them
+  as floats. Recorded quantities and conversion factors remain `Decimal`.
+- **Weighed receipts.** `ReceiptMeasurement` records supplier-declared net,
+  measured gross, tare, net, unit and weighing-point reference. Gross minus
+  tare must equal net; exactly one measured line must explicitly name the
+  same unit and quantity. `supplier_variance()` is declared minus measured
+  net. The ticket and source evidence remain attached to the transaction.
+- **Retries.** Canonical decimal values, the kind, actor and request make a
+  SHA-256 fingerprint. An omitted effective time stays omitted in this
+  fingerprint. A matching retry returns the original, including its original
+  conversion and timestamps, without adding entries or mutation audit rows.
+  A different request under the same ID returns `Request id conflict`.
+  Replays still require current write permission and a writable company.
+- **Stock and locking.** The Core writable-company lock serializes writes,
+  including conflicting request IDs that name disjoint materials; material
+  locks also serialize retirement and conversion changes. Before inserting,
+  every position must cover all withdrawals in the request. Its own additions
+  cannot fund them. Stock is the sum of signed stock entries, never the item
+  master's `quantity_on_hand`.
+- **Time and context.** Effective time cannot be in the future; recorded
+  time comes from the database after locks. `shipment` and `destination`
+  are stored opaque references. Production context (`operation_execution`,
+  `order_or_batch`, `work_centre`) and corrections of authority-backed
+  transactions are refused with `Unregistered posting authority` until the
+  production posting functions in XI3. No cross-domain lookup occurs.
+- **Database backstops.** Migration `factory-inventory-003-ledger` creates
+  transactions and signed entries with company-local composite references,
+  append-only UPDATE/DELETE/TRUNCATE triggers and deferred checks on both
+  tables. At commit every transaction must have entries and sum to zero
+  separately in each native unit. Receipts/consumption/corrections pair stock
+  with an opposite boundary entry; transfers pair two stock locations.
+
+These operations have no pages in Bilimbi. XI2 adds neither pages nor agent
+operations. The disposable walkthrough drives the facade, concurrent posts,
+retries, permissions, retirement and PostgreSQL refusals. Genealogy, identity
+stock, production postings and transaction balance/correction-chain reports
+belong to XI3.
 
 ## Capabilities
 

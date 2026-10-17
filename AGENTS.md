@@ -69,6 +69,10 @@ confirmations verbatim.
   with no `Change` as invalid.
 - Use `bilibi_company::organisation::{authorize_target, require_live,
   require_writable}` for the company, not `companies` SQL of your own.
+- Keep native ledger arithmetic in PostgreSQL, not `rust_decimal`: its
+  `numeric(36,12)` quantities exceed Decimal's precision. Use the Inventory
+  posting facade, not entry inserts, to preserve locking and retry semantics
+  (contract: `inventory/README.md`, "Material Transaction ledger").
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.

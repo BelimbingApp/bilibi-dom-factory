@@ -9,7 +9,7 @@ with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
-| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); the item catalog: items, material types, materials and conversions (XI1); ledger, genealogy and pages follow |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); genealogy and pages follow |
 | `product_definition/` | `factory/product_definition` | `bilibi-factory-product-definition` | not yet ported |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
@@ -68,6 +68,12 @@ BILIBI_FACTORY_FIXTURE=disposable cargo run
 Set `CARGO_TARGET_DIR` to share build output with the Platform. The fixture
 creates its own data; production installs carry none (`seed-production` seeds
 nothing for Factory).
+
+XI2's walkthrough includes concurrent withdrawals and retries, conversion
+version preservation, weighed receipts, signed corrections, stock retirement,
+permission and company isolation, and PostgreSQL's append-only and deferred
+balance refusals. These facade-only operations have no pages in the reference;
+run the walkthrough to exercise them rather than following the XI4 menu links.
 
 ## License
 
