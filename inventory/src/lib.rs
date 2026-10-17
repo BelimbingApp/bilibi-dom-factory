@@ -433,6 +433,18 @@ impl Inventory {
         genealogy::get(client, scope, company_id, identity_id).await
     }
 
+    /// Reads an identity on a sibling's mutation connection, retaining scope
+    /// and authorization and seeing any earlier posting in that transaction.
+    pub async fn get_identity_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Identity> {
+        genealogy::get(client, scope, company_id, identity_id).await
+    }
+
     /// The identity's positive stock positions by location; empty once none
     /// remains in stock.
     pub async fn get_identity_positions(

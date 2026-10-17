@@ -71,3 +71,8 @@ version = "0.2.38"
 
 [dependencies.bilibi-settings]
 path = "../../../../base/settings"
+
+# H6 reviewed production operations on a freshly migrated disposable DB.
+[[bin]]
+name = "production-operations"
+path = "src/production_operations.rs"

@@ -89,8 +89,8 @@ Nine tables with tenant and company ownership; product, resource and Inventory
 references are opaque IDs the sibling facades validated (no SQL dependence on
 their tables, no cross-container reference). PostgreSQL refuses UPDATE, DELETE
 and TRUNCATE on executions and overrides. Every saved row is audited with
-complete old/new data. There are no production seeds, agent operations, CSS or
-JavaScript.
+complete old/new data. There are no production seeds, domain CSS or JavaScript.
+Reviewed agent operations are described below.
 
 ## Shop-floor capture (XP2)
 
@@ -152,3 +152,29 @@ Timestamps use Base Datetime's display policy and shared timestamp component. `s
 ### Page proof
 
 On a disposable migrated database, run the existing `production-execution` and `shop-floor` walkthrough binaries, then `floor-pages` from `fixtures/walkthrough` with the same `BILIBI_FACTORY_FIXTURE=disposable`, `DATABASE_URL`, and Platform `CARGO_TARGET_DIR`. It drives the registered PageService and real facade mutations (selection, range flags, both corrections, retry, stale permission and archived company refusals), plus the same company-time source. `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35593 BIND_ADDR=127.0.0.1:35593` keeps the composed app running for browser proof after the checks. No fixture data is a product seed.
+
+## Reviewed production operations (H6)
+
+H6 adds headless order creation, live/import completion and hold-override reads through the Platform agent registry and reviewed safe-write plans. It retains the facade's existing capability checks and private Inventory posting authority; no page or new capability is introduced. Prerequisites that need generated IDs (a new order or output identity) must be committed in a separate plan before referring to them. Plans commit atomically but preview each operation against committed data, not earlier speculative operations.
+
+| Operation under `factory.production_execution.` | Access |
+| --- | --- |
+| `order.list`, `order.get` | `floor.view` |
+| `execution.list`, `execution.get`, `hold_override.list` | `floor.view` |
+| `order.create`, `operation.complete` | Reviewed safe write; `configuration.manage` and the facade's sibling grants |
+
+The searchable guide `factory.production_execution` documents inputs and workflow. Both HTTP (`/api/v1/operations`, `/api/v1/plans`, `/api/v1/plans/commit`) and MCP expose the same registry. Direct writes are refused. Every input includes `company_id`; reads take `order_id` or `execution_id` as applicable and lists accept an optional `limit` bounded by the facade. Quantities are exact decimal strings, timestamps are RFC3339 with offsets. Pre-1970 completion/override timestamps are refused because the existing retry fingerprint cannot serialize them.
+
+`order.create` takes the `NewOrder` fields above. Commit it before using the returned ID in a completion plan. `operation.complete` takes `order_id`, `source` (`live` or `import`) and the `Completion` fields above. Omitted `unit_id` uses the immutable native unit; every non-native line must supply `conversion_version`, so publishing a newer conversion cannot silently change an approved draw. Output lines may create an identity (`kind`, `code`, optional `dimensions`); previews use symbolic identities, never predicted IDs, and commits return resolved IDs in signed posting entries. Record the order/identity in an earlier plan before citing its generated ID.
+
+Review executes the same owner validation/posting path in a rolled-back `MutationBoundary`; it leaves no business rows or mutation audits, although PostgreSQL sequences may have gaps. Import and override preflight authorization decisions remain durable on refusal. Commit repeats all validations under the writable-company lock, retains request-id replay semantics, and derives recorder/authority only from Scope/the private contributed static. Import and override grants are rechecked, not inferred from operator or historical approver fields. An identical recorded retry does not reauthorize historical holds; import still requires its grant. Platform authorization has no transaction-wide grant-revocation fence: this does not promise revocation cannot race the final check.
+
+Run the H6 proof on a **freshly migrated separate disposable database**:
+
+```sh
+DATABASE_URL=postgres://bilibi:bilibi@127.0.0.1:5438/<disposable-db> \
+  BILIBI_FACTORY_FIXTURE=disposable CARGO_TARGET_DIR="$HOME/bilibi/target" \
+  cargo run --manifest-path fixtures/walkthrough/Cargo.toml --bin production-operations
+```
+
+To exercise HTTP/MCP too, start `bilibi-web run` against that same database and set `BILIBI_FACTORY_API` to its local address when running the proof. The executable installs only disposable fixture accounts, creates actual units/materials/definitions/stock, reviews and commits production operations, and checks generated-identity/conversion evidence, import/override denial logs and revocation, replay/conflict, tenant isolation, malformed inputs, single-use plans, and whole-plan rollback after a later overdraw. The optional edge checks obtain a real device-grant token, create/complete through HTTP and consume through MCP with an authenticated agent recorder; tokens and plan codes are never printed. It adds no production routes, accounts or data.
