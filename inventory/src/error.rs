@@ -51,6 +51,20 @@ pub enum Error {
     InsufficientStock,
     #[error("Unregistered posting authority")]
     UnregisteredPostingAuthority,
+    #[error("Variance required")]
+    VarianceRequired,
+    #[error("No variance")]
+    NoVariance,
+    #[error("Identity not found")]
+    IdentityNotFound,
+    #[error("Identity required")]
+    IdentityRequired,
+    #[error("Invalid identity")]
+    InvalidIdentity,
+    #[error("Insufficient identity stock")]
+    InsufficientIdentityStock,
+    #[error("Insufficient unidentified stock")]
+    InsufficientUnidentifiedStock,
     #[error("Conversion not found")]
     ConversionNotFound,
     #[error("Native unit")]
