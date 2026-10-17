@@ -9,7 +9,7 @@ with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
-| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); genealogy and pages follow |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); lot and unit genealogy, transforms, balances and the production posting authority (XI3); pages follow |
 | [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); pages follow in XD2 |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
@@ -74,6 +74,14 @@ version preservation, weighed receipts, signed corrections, stock retirement,
 permission and company isolation, and PostgreSQL's append-only and deferred
 balance refusals. These facade-only operations have no pages in the reference;
 run the walkthrough to exercise them rather than following the XI4 menu links.
+
+For XI3, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin genealogy`. It registers a
+fixture Factory module, `factory/walkthrough`, as the posting authority (as
+Bilimbi's tests declare `TestPostingAuthority`) and checks identities with
+dimensions, transforms with per-unit variance, traces, draws, corrections,
+per-unit and cross-unit balances, the authority registry's boot refusals,
+access and PostgreSQL refusals; it exits nonzero on an unexpected result.
 
 For XD1, use a separate freshly migrated disposable database and run
 `BILIBI_FACTORY_FIXTURE=disposable cargo run --bin product-definition` from

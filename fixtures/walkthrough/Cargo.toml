@@ -14,6 +14,10 @@ default-run = "bilibi-factory-walkthrough"
 name = "product-definition"
 path = "src/product_definition.rs"
 
+[[bin]]
+name = "genealogy"
+path = "src/genealogy.rs"
+
 [workspace]
 
 [dependencies]

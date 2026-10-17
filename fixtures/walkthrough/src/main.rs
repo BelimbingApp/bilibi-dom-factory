@@ -89,9 +89,13 @@ async fn main() -> Result<(), Error> {
             // lifts the trigger to start again.
             "ALTER TABLE factory_inventory_transactions DISABLE TRIGGER factory_inventory_transactions_no_truncate;
              ALTER TABLE factory_inventory_transaction_entries DISABLE TRIGGER factory_inventory_entries_no_truncate;
-             TRUNCATE factory_inventory_transactions,factory_inventory_transaction_entries;
+             ALTER TABLE factory_inventory_identities DISABLE TRIGGER factory_inventory_identities_no_truncate;
+             ALTER TABLE factory_inventory_genealogy_links DISABLE TRIGGER factory_inventory_genealogy_links_no_truncate;
+             TRUNCATE factory_inventory_transactions,factory_inventory_transaction_entries,factory_inventory_identities,factory_inventory_genealogy_links;
              ALTER TABLE factory_inventory_transactions ENABLE TRIGGER factory_inventory_transactions_no_truncate;
              ALTER TABLE factory_inventory_transaction_entries ENABLE TRIGGER factory_inventory_entries_no_truncate;
+             ALTER TABLE factory_inventory_identities ENABLE TRIGGER factory_inventory_identities_no_truncate;
+             ALTER TABLE factory_inventory_genealogy_links ENABLE TRIGGER factory_inventory_genealogy_links_no_truncate;
              ALTER TABLE factory_inventory_unit_conversions DISABLE TRIGGER factory_inventory_unit_conversions_append_only;
              DELETE FROM factory_inventory_unit_conversions;
              ALTER TABLE factory_inventory_unit_conversions ENABLE TRIGGER factory_inventory_unit_conversions_append_only;

@@ -19,6 +19,7 @@ fn line(item: i64, location: i64, quantity: i64) -> StockLine {
         conversion_version: None,
         observation: Observation::Measured,
         evidence: None,
+        ..Default::default()
     }
 }
 fn request(id: &str, lines: Vec<StockLine>) -> PostingRequest {
@@ -409,7 +410,7 @@ pub(super) async fn run(
         "UPDATE factory_inventory_transaction_entries SET native_quantity=1",
         "DELETE FROM factory_inventory_transaction_entries",
         "TRUNCATE factory_inventory_transaction_entries",
-        "TRUNCATE factory_inventory_transactions,factory_inventory_transaction_entries",
+        "TRUNCATE factory_inventory_transactions,factory_inventory_transaction_entries,factory_inventory_identities,factory_inventory_genealogy_links",
         "INSERT INTO factory_inventory_transactions(tenant_id,company_id,kind,request_id,request_fingerprint,actor_type,actor_id,evidence,effective_at,recorded_at) VALUES(1,1,'receipt','empty','x','user',1,'proof',now(),now())",
         "INSERT INTO factory_inventory_transaction_entries(tenant_id,company_id,transaction_id,role,material_id,location_id,native_quantity,native_unit_id,recorded_quantity,recorded_unit_id,observation) SELECT tenant_id,company_id,transaction_id,role,material_id,location_id,1,native_unit_id,1,recorded_unit_id,observation FROM factory_inventory_transaction_entries WHERE role='stock' LIMIT 1",
         "INSERT INTO factory_inventory_transaction_entries(tenant_id,company_id,transaction_id,role,material_id,location_id,native_quantity,native_unit_id,recorded_quantity,recorded_unit_id,observation) SELECT tenant_id,2,transaction_id,role,material_id,location_id,1,native_unit_id,1,recorded_unit_id,observation FROM factory_inventory_transaction_entries WHERE role='stock' LIMIT 1",

@@ -77,6 +77,17 @@ confirmations verbatim.
   `numeric(36,12)` quantities exceed Decimal's precision. Use the Inventory
   posting facade, not entry inserts, to preserve locking and retry semantics
   (contract: `inventory/README.md`, "Material Transaction ledger").
+- Post production only through Inventory's four production postings, passing
+  your module's private `static PostingAuthority` contributed to
+  `POSTING_AUTHORITIES` (`inventory/src/authority.rs`); never carry production
+  context on an ordinary posting or share the static, because Inventory
+  accepts only the contributed static's address and boot refuses a declaration
+  outside the `factory` container.
+- Create a lot or unit on the receipt or output line's `identity` and cite its
+  `identity_id` later; read dimensions, positions and traces through the
+  genealogy facade, and a mixed-unit transform's agreement through
+  `get_transaction_balance`, never by converting quantities yourself, because
+  posted observations and conversion versions are the record.
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.
