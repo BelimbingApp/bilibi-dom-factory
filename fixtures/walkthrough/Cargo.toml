@@ -68,3 +68,6 @@ path = "../../../../base/datetime"
 
 [dependencies.jiff]
 version = "0.2.38"
+
+[dependencies.bilibi-settings]
+path = "../../../../base/settings"
