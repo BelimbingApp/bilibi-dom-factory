@@ -487,10 +487,7 @@ impl Completer {
         // transaction. Nothing from this preflight authorizes that write.
         {
             let client = self.read_client().await?;
-            let (_, request) = self
-                .prepare(&**client, scope, company, order_id, source, completion)
-                .await?;
-            self.check_holds(&**client, scope, company, &request)
+            self.preflight(&**client, scope, company, order_id, source, completion)
                 .await?;
         }
         let mut client = self.db.get().await.map_err(bilibi_database::Error::from)?;
@@ -516,6 +513,24 @@ impl Completer {
                 Err(error)
             }
         }
+    }
+
+    /// Keep refusal decisions on an autocommit connection. The transaction
+    /// repeats these checks; this result never authorizes a later write.
+    pub(crate) async fn preflight(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        order_id: i64,
+        source: Source,
+        completion: &Completion,
+    ) -> Result<()> {
+        let (_, request) = self
+            .prepare(client, scope, company, order_id, source, completion)
+            .await?;
+        self.check_holds(client, scope, company, &request).await?;
+        Ok(())
     }
 
     async fn prepare(
@@ -602,11 +617,14 @@ impl Completer {
             )
             .await?
             .ok_or(Error::OrderNotFound)?;
+        // SystemTime's serde representation cannot encode pre-epoch times.
+        // Refuse fallibly, retaining the fingerprint of every valid retry.
+        let serialized = serde_json::to_value(request).map_err(|_| Error::InvalidExecution)?;
         let fingerprint: String = tx
             .sql()
             .query_one(
                 "SELECT encode(sha256(convert_to($1::jsonb::text,'UTF8')),'hex')",
-                &[&json!({"order_id":order.id,"request":request})],
+                &[&json!({"order_id":order.id,"request":serialized})],
             )
             .await?
             .get(0);

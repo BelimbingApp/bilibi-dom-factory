@@ -362,6 +362,21 @@ impl WriteHandler for Write {
         Box::pin(async move {
             let owner = owner()?;
             let mut client = owner.db.get().await.map_err(bilibi_database::Error::from)?;
+            if let Self::Complete = self {
+                let (source, completion) = completion(input)?;
+                owner
+                    .completer
+                    .preflight(
+                        &**client,
+                        scope,
+                        id(input, "company_id")?,
+                        id(input, "order_id")?,
+                        source,
+                        &completion,
+                    )
+                    .await
+                    .map_err(refuse)?;
+            }
             let mut tx = owner
                 .mutations
                 .begin(
