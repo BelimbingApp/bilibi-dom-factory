@@ -9,7 +9,7 @@ with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
-| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); lot and unit genealogy, transforms, balances and the production posting authority (XI3); pages follow |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); lot and unit genealogy, transforms, balances and the production posting authority (XI3); agent operations for locations, postings, stock, transaction and genealogy reads (H5); pages follow in XI4 |
 | [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); Resource types, Resources and BOM formulas & routings pages (XD2) |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
@@ -99,6 +99,22 @@ nonzero on unexpected results. It covers typed properties, publication and
 concurrent version allocation, exact selection, retirement, authorization,
 tenant/company isolation, SQL immutability and audit records. No Product
 Definition pages exist until XD2; the facade walkthrough is its runnable entry.
+
+For H5, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin agent-operations` from the
+same fixture folder. It signs in as real accounts and drives Inventory's agent
+operations through the registry and the reviewed safe-write plan service:
+discovery by a manager and a viewer, location creation, receipts (a converted
+unit, a lot, a weigh ticket), replays and request-id conflicts, transfers,
+consumption refused for insufficient stock, a review outrun by a later
+posting, a grant revoked between review and commit, a signed correction, the
+transaction, balance and genealogy reads, and another tenant's refusal. It
+checks each outcome and exits nonzero on an unexpected one; plan codes are
+never printed. With `BILIBI_FACTORY_API=http://127.0.0.1:3012` set and the
+composed app running against the same database (`BIND_ADDR=127.0.0.1:3012
+APP_ORIGIN=http://localhost:3012 bilibi-web run`), it ends by approving a real
+OAuth device grant and driving search, a refused direct write, a plan review,
+its commit and a refused replay through `/api/v1`.
 
 ## License
 

@@ -22,6 +22,7 @@ use bilibi_tenancy::Scope;
 use std::sync::Arc;
 
 mod access;
+mod agent_operations;
 mod authority;
 mod balance;
 mod contributions;
@@ -860,7 +861,7 @@ inventory::submit! {
         id: "factory/inventory",
         layer: Layer::Domains,
         dependencies: &[
-            "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
+            "base/agent_api", "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
             "base/settings", "base/tenancy", "core/company",
         ],
         migrations: &[
@@ -884,7 +885,7 @@ inventory::submit! {
         services: &[Service {
             id: SERVICE,
             factory: |services| {
-                Ok(Arc::new(Inventory {
+                let inventory = Arc::new(Inventory {
                     db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
                     mutations: services.get("base/database.mutations")?,
                     settings: services.get("base/settings.store")?,
@@ -893,7 +894,9 @@ inventory::submit! {
                         bilibi_module_registry::Catalog::discover(&bilibi_module_registry::discover()?)?
                             .entries::<PostingAuthority>(POSTING_AUTHORITIES)?,
                     )?,
-                }))
+                });
+                agent_operations::bind(inventory.clone())?;
+                Ok(inventory)
             },
         }],
     }

@@ -19,12 +19,18 @@ name = "genealogy"
 path = "src/genealogy.rs"
 
 [[bin]]
+name = "agent-operations"
+path = "src/agent_operations.rs"
+
+[[bin]]
 name = "product-definition-pages"
 path = "src/product_definition_pages.rs"
 
 [workspace]
 
 [dependencies]
+bilibi-agent-access = { path = "../../../../core/agent_access" }
+bilibi-agent-api = { path = "../../../../base/agent_api" }
 bilibi-authz = { path = "../../../../base/authz" }
 bilibi-database = { path = "../../../../base/database" }
 bilibi-tenancy = { path = "../../../../base/tenancy" }
