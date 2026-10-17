@@ -888,8 +888,10 @@ inventory::submit! {
                     db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
                     mutations: services.get("base/database.mutations")?,
                     settings: services.get("base/settings.store")?,
+                    // Services.catalog is published after factories, as Settings notes.
                     authorities: authority::registered(
-                        services.catalog()?.entries::<PostingAuthority>(POSTING_AUTHORITIES)?,
+                        bilibi_module_registry::Catalog::discover(&bilibi_module_registry::discover()?)?
+                            .entries::<PostingAuthority>(POSTING_AUTHORITIES)?,
                     )?,
                 }))
             },
