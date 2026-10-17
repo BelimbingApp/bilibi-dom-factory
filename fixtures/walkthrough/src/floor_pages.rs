@@ -150,6 +150,36 @@ async fn main() -> Result<(), Error> {
         .organisation()
         .ok_or("manager company")?
         .get();
+    let settings = app
+        .services
+        .get::<bilibi_settings::Settings>("base/settings.store")?;
+    let boundary = app
+        .services
+        .get::<bilibi_database::MutationBoundary>("base/database.mutations")?;
+    let mut c = db.get().await?;
+    let mut tx = boundary
+        .begin(
+            &mut c,
+            manager.mutation_context("factory.walkthrough.floor_timezone"),
+        )
+        .await?;
+    settings
+        .put(
+            &mut tx,
+            &manager,
+            bilibi_settings::Target::Company(
+                manager.actor().organisation().ok_or("manager company")?,
+            ),
+            bilibi_datetime::TIMEZONE_KEY,
+            json!("Asia/Kuala_Lumpur"),
+        )
+        .await?;
+    app.services
+        .get::<bilibi_datetime::DisplayPolicy>("base/datetime.display")?
+        .put_mode(&mut tx, &manager, "company")
+        .await?;
+    tx.commit().await?;
+    drop(c);
     let c = db.get().await?;
     let order:i64=c.query_one("SELECT id FROM factory_production_orders WHERE tenant_id=$1 AND company_id=$2 AND code='ORD-1'",&[&manager.tenant(),&company]).await?.get(0);
     let run:i64=c.query_one("SELECT id FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=$2 AND request_id='run-1'",&[&manager.tenant(),&company]).await?.get(0);
@@ -231,6 +261,12 @@ async fn main() -> Result<(), Error> {
             && body.html.contains("floor-yield")
             && body.html.contains("min-h-14")
             && body.html.contains("wastage-form"),
+    )?;
+    verify(
+        "stored company timezone reaches timestamp components",
+        body.html.contains("data-text-company=")
+            && body.html.contains("data-mode=\"company\"")
+            && body.html.contains("+08"),
     )?;
     let query = body.query;
     let mut restored = mount(&page, &manager, &query).await?;
