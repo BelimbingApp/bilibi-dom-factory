@@ -279,6 +279,29 @@ async fn main() -> Result<(), Error> {
     )
     .await?;
     verify("own clock out", body.html.contains("Clocked out."))?;
+    let denied_other = event(
+        &mut floor,
+        &manager,
+        form(
+            "clock_in",
+            "labour",
+            &[
+                ("request_id", json!("xp4-forged-worker")),
+                ("role_id", json!(id(&role).to_string())),
+                ("worker_user_id", json!(viewer.user().to_string())),
+            ],
+        ),
+    )
+    .await?;
+    verify(
+        "own grant cannot clock another worker",
+        !denied_other.html.contains("Clocked in.")
+            && pe
+                .list_labour(&manager, company, order)
+                .await?
+                .iter()
+                .all(|r| r["request_id"] != "xp4-forged-worker"),
+    )?;
     let mut restricted = mount(&page, &viewer, &query, "floor").await?;
     let body = event(&mut restricted, &viewer, json!({"type":"clock_in"})).await?;
     verify(
@@ -405,6 +428,45 @@ async fn main() -> Result<(), Error> {
         corrected["execution_id"] == run
             && corrected["worker_user_id"] == viewer.user()
             && corrected["started_at"] == worked["started_at"],
+    )?;
+    let precise=pe.record_labour(&manager,company,order,&json!({"request_id":"xp4-precise","worker_user_id":viewer.user(),"role_id":id(&role),"execution_id":run,"started_at":"2026-01-06T00:00:42.123456Z","stopped_at":"2026-01-06T01:30:55.123456Z"})).await?;
+    floor
+        .update(LiveRequest {
+            scope: &manager,
+            credential: "",
+            input: LiveInput::Refresh,
+        })
+        .await?;
+    event(
+        &mut floor,
+        &manager,
+        json!({"type":"start_labour_correction","id":id(&precise).to_string()}),
+    )
+    .await?;
+    let body = event(
+        &mut floor,
+        &manager,
+        form(
+            "save_labour_correction",
+            "labour_correction",
+            &[
+                ("started_at", json!("2026-01-06T08:00")),
+                ("stopped_at", json!("2026-01-06T09:30")),
+                ("correction_reason", json!("Keep recorded instants")),
+            ],
+        ),
+    )
+    .await?;
+    let rows = pe.list_labour(&manager, company, order).await?;
+    let kept = rows
+        .iter()
+        .find(|r| r["corrects_id"] == id(&precise))
+        .ok_or("precision correction")?;
+    verify(
+        "unchanged minute correction retains seconds and subseconds",
+        body.html.contains("Labour corrected.")
+            && kept["started_at"] == precise["started_at"]
+            && kept["stopped_at"] == precise["stopped_at"],
     )?;
     grants
         .set_direct(
