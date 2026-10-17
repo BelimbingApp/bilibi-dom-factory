@@ -269,10 +269,10 @@ impl Floor {
                 "",
                 d,
                 [
-                    ("Measured", "measured"),
-                    ("Declared", "declared"),
-                    ("Counted", "counted"),
-                    ("Derived", "derived"),
+                    ("measured", "measured"),
+                    ("declared", "declared"),
+                    ("counted", "counted"),
+                    ("derived", "derived"),
                 ]
                 .into_iter()
                 .map(|(label, value)| Choice::new(label, value))

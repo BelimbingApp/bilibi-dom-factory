@@ -74,7 +74,11 @@ pub(super) fn button(label: &str, event: &str, id: &str, primary: bool) -> Resul
 pub(super) fn limits(value: &Value) -> String {
     [("min", "minimum"), ("target", "target"), ("max", "maximum")]
         .into_iter()
-        .filter_map(|(label, key)| value[key].as_str().map(|v| format!("{label} {v}")))
+        .filter_map(|(label, key)| {
+            value[key]
+                .as_str()
+                .map(|v| format!("{label} {}", quantity(v)))
+        })
         .collect::<Vec<_>>()
         .join(" · ")
 }
@@ -142,4 +146,13 @@ pub(super) struct Picker<'a> {
     pub(super) actions: Html,
     pub(super) buttons: Html,
     pub(super) empty: Html,
+}
+
+// Presentation only: keep arbitrary precision quantities as text.
+fn quantity(value: &str) -> &str {
+    if value.contains('.') {
+        value.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        value
+    }
 }
