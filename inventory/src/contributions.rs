@@ -116,7 +116,7 @@ inventory::submit! { Contribution::new(DEFINITIONS, DEFAULT_CURRENCY_KEY, proven
 macro_rules! page {
     ($id:literal, $path:literal, $operation:literal) => {
         inventory::submit! { Contribution::new(ROUTES, $id, provenance!(), &Route {
-            method: Method::Get, path: $path, service: crate::pages::SERVICE, operation: $operation,
+            method: Method::Get, path: $path, service: crate::web::SERVICE, operation: $operation,
             access: Access::Capability(CONFIGURATION_VIEW), framed: true,
         }) }
     };

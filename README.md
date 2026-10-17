@@ -1,7 +1,7 @@
 # bilibi-dom-factory
 
 Factory Domain for [Bilibi](https://github.com/BelimbingApp/bilibi): Inventory,
-and in later slices Product Definition and Production Execution. It is one
+Product Definition, and in later slices Production Execution. It is one
 optional, independently versioned repository that a manufacturing adopter
 mounts into a Bilibi checkout; it does not build on its own. It is the Rust
 port of Bilimbi's [`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory),
@@ -9,8 +9,8 @@ with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
-| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); the item catalog: items, material types, materials and conversions (XI1); the five Inventory pages (XI4); ledger and genealogy follow |
-| `product_definition/` | `factory/product_definition` | `bilibi-factory-product-definition` | not yet ported |
+| [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); lot and unit genealogy, transforms, balances and the production posting authority (XI3); agent operations for locations, postings, stock, transaction and genealogy reads (H5); the five Inventory pages (XI4) |
+| [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); Resource types, Resources and BOM formulas & routings pages (XD2) |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
 Factory declares no dependency on any other Domain container, and no Domain
@@ -68,6 +68,53 @@ BILIBI_FACTORY_FIXTURE=disposable cargo run
 Set `CARGO_TARGET_DIR` to share build output with the Platform. The fixture
 creates its own data; production installs carry none (`seed-production` seeds
 nothing for Factory).
+
+XI2's walkthrough includes concurrent withdrawals and retries, conversion
+version preservation, weighed receipts, signed corrections, stock retirement,
+permission and company isolation, and PostgreSQL's append-only and deferred
+balance refusals. These facade-only operations have no pages in the reference;
+run the walkthrough to exercise them rather than following the XI4 menu links.
+
+For XI3, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin genealogy`. It registers a
+fixture Factory module, `factory/walkthrough`, as the posting authority (as
+Bilimbi's tests declare `TestPostingAuthority`) and checks identities with
+dimensions, transforms with per-unit variance, traces, draws, corrections,
+per-unit and cross-unit balances, the authority registry's boot refusals,
+access and PostgreSQL refusals; it exits nonzero on an unexpected result.
+
+For XD2, the pages: on a separate freshly migrated disposable database run
+`BILIBI_FACTORY_FIXTURE=disposable APP_ORIGIN=http://localhost:3020 BIND_ADDR=127.0.0.1:3020 cargo run --bin product-definition-pages`
+from the same fixture folder. It installs the fixture accounts, one unit and two
+items, and serves the composed app; sign in at `http://localhost:3020` (use
+`localhost`, the origin the session cookie is issued for) as
+`manager@example.test` (manages) or `viewer@example.test` (reads), password
+`bilibi-dev`, and open Administration → Factory → Resources, BOM formulas &
+routings, or `/factory/resource-types`.
+
+For XD1, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin product-definition` from
+the same fixture folder. This binary checks its runtime outcomes and exits
+nonzero on unexpected results. It covers typed properties, publication and
+concurrent version allocation, exact selection, retirement, authorization,
+tenant/company isolation, SQL immutability and audit records. No Product
+Definition pages exist until XD2; the facade walkthrough is its runnable entry.
+
+For H5, use a separate freshly migrated disposable database and run
+`BILIBI_FACTORY_FIXTURE=disposable cargo run --bin agent-operations` from the
+same fixture folder. It signs in as real accounts and drives Inventory's agent
+operations through the registry and the reviewed safe-write plan service:
+discovery by a manager and a viewer, location creation, receipts (a converted
+unit, a lot, a weigh ticket), replays and request-id conflicts, transfers,
+consumption refused for insufficient stock, a review outrun by a later
+posting, a grant revoked between review and commit, a signed correction, the
+transaction, balance and genealogy reads, and another tenant's refusal. It
+checks each outcome and exits nonzero on an unexpected one; plan codes are
+never printed. With `BILIBI_FACTORY_API=http://127.0.0.1:3012` set and the
+composed app running against the same database (`BIND_ADDR=127.0.0.1:3012
+APP_ORIGIN=http://localhost:3012 bilibi-web run`), it ends by approving a real
+OAuth device grant and driving search, a refused direct write, a plan review,
+its commit and a refused replay through `/api/v1`.
 
 ## License
 

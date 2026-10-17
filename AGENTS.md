@@ -53,10 +53,14 @@ confirmations verbatim.
   fixture carries one only as data. Read item statuses and the default currency
   through `Inventory::item_settings`, never from a constant.
 - For a property a company defines on its types, use `PropertyDefinition`
-  and `property::validate` in `inventory/src/property.rs` and store the
+  and Inventory's `normalize_property_definitions`/`validate_property_values`
+  facade (implemented in `inventory/src/property.rs`) and store the
   validated values on the typed row, as materials do; do not add a typed
   column or a second validator for one property, because the definitions are
   the company's and one mechanism keeps them behaving alike.
+- Read Inventory inside a sibling's mutation through `get_item_on`,
+  `get_material_on` and `get_unit_on`, not a second pool connection: this sees
+  pending data, retains authorization and avoids pool exhaustion under locks.
 - Do not hard-code what an operator could set (limits, scopes, codes,
   vocabularies): declare a Base setting with an editor, as `contributions.rs`
   does for `factory.inventory.item_statuses`.
@@ -69,10 +73,33 @@ confirmations verbatim.
   with no `Change` as invalid.
 - Use `bilibi_company::organisation::{authorize_target, require_live,
   require_writable}` for the company, not `companies` SQL of your own.
-- A page is a mounted state in `inventory/src/pages` over the facade, never SQL
-  of its own: check `…configuration.manage` in the event before calling a
-  write, and name a form's submit event for its action (`save_unit`), because
-  `live.js` reserves `save`. Retire behind `ConfirmDialog`, never `data-confirm`.
+- Keep native ledger arithmetic in PostgreSQL, not `rust_decimal`: its
+  `numeric(36,12)` quantities exceed Decimal's precision. Use the Inventory
+  posting facade, not entry inserts, to preserve locking and retry semantics
+  (contract: `inventory/README.md`, "Material Transaction ledger").
+- Post production only through Inventory's four production postings, passing
+  your module's private `static PostingAuthority` contributed to
+  `POSTING_AUTHORITIES` (`inventory/src/authority.rs`); never carry production
+  context on an ordinary posting or share the static, because Inventory
+  accepts only the contributed static's address and boot refuses a declaration
+  outside the `factory` container.
+- Create a lot or unit on the receipt or output line's `identity` and cite its
+  `identity_id` later; read dimensions, positions and traces through the
+  genealogy facade, and a mixed-unit transform's agreement through
+  `get_transaction_balance`, never by converting quantities yourself, because
+  posted observations and conversion versions are the record.
+- A module's pages are a private `src/web` behind one `PageService`, with routes and menu items in its `contributions.rs`; a live event that writes re-checks its capability itself (`web/shared.rs` `can`) before calling the facade, which checks once more. Do not trust the route guard alone, because a grant can be revoked while the page is open.
+- In facade code collect any iterator into an owned `Vec`/`HashSet` before the first `.await` (as `product_definition/src/revisions.rs` does). A borrowed iterator held across an await makes the facade's future unprovably `Send`, and a page cannot await it: rustc reports "implementation of `Send` is not general enough" at the page, far from the cause.
+- Expose an Inventory write to agents only as a reviewed safe write in
+  `inventory/src/agent_operations.rs`, calling the facade's own code
+  (`ledger::post`, `locations::create`) inside the plan's `MutationTransaction`
+  and previewing it in a rolled-back transaction. Do not write a second
+  validator, direct write or production posting there: the preview must refuse
+  exactly what the commit will, and an agent holds no `PostingAuthority`.
+- Name a page form's submit event for its action (`save_unit`), never `save`,
+  because `live.js` reserves that name and nests its values under `edit`; a
+  retirement waits on `ConfirmDialog`, never `data-confirm`, which the
+  Platform does not run.
 - Lists are `FlexTable` with `ListColumns`, and a page composes Platform
   components only (`bilibi_ui`); a Domain owns no CSS or JavaScript, so a class
   the Platform stylesheet lacks is a Platform change.

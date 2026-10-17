@@ -1,9 +1,10 @@
 //! Factory Inventory (`factory/inventory`): the item master and its company
 //! settings, units of measure, stock locations, material types, material
 //! identity and versioned unit conversions behind one facade, [`Inventory`].
-//! Schema, SQL, validation and helpers stay private to this crate; later
-//! slices add the Material Transaction ledger and genealogy behind the same
-//! facade.
+//! Schema, SQL, validation and helpers stay private to this crate. The
+//! Material Transaction ledger records stock movements without changing
+//! earlier observations, with lot and unit genealogy, and takes production
+//! postings only from a registered [`PostingAuthority`].
 //!
 //! Every operation takes the sealed [`Scope`] and a company ID. A read needs
 //! its view capability (`factory.inventory.configuration.view`, or
@@ -21,21 +22,36 @@ use bilibi_tenancy::Scope;
 use std::sync::Arc;
 
 mod access;
+mod agent_operations;
+mod authority;
+mod balance;
 mod contributions;
 mod conversions;
 mod error;
+mod genealogy;
 mod items;
+mod ledger;
+mod ledger_request;
 mod locations;
 mod material_types;
 mod materials;
-mod pages;
+mod web;
 mod property;
 mod settings;
 mod units;
 
+pub use authority::{PostingAuthority, POSTING_AUTHORITIES};
+pub use balance::{Balance, BalanceConversion, CrossUnitBalance, UnitBalance};
 pub use conversions::Conversion;
 pub use error::{Error, FieldError};
+pub use genealogy::{Identity, IdentityPosition, Trace, TraceLink};
 pub use items::{Item, ItemUpdate, NewItem};
+pub use ledger::{Entry, GenealogyLink, MaterialTransaction, StockPosition};
+use ledger_request::TransactionKind;
+pub use ledger_request::{
+    Dimension, DimensionName, DimensionProvenance, IdentityKind, LengthUnit, NewIdentity,
+    Observation, PostingRequest, ReceiptMeasurement, StockLine, UnitVariance, Variance,
+};
 pub use locations::{Location, NewLocation};
 pub use material_types::{MaterialType, MaterialTypeUpdate, NewMaterialType};
 pub use materials::{Material, MaterialTyping};
@@ -63,6 +79,8 @@ pub struct Inventory {
     db: Db,
     mutations: Arc<MutationBoundary>,
     settings: Arc<Settings>,
+    /// The production posting authorities contributed at link time.
+    authorities: Vec<&'static PostingAuthority>,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -98,6 +116,391 @@ macro_rules! audited {
 }
 
 impl Inventory {
+    /// One posting in one audited transaction; `authority` is already proven
+    /// registered when present.
+    async fn post(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        kind: TransactionKind,
+        request: &PostingRequest,
+        authority: Option<&'static PostingAuthority>,
+    ) -> Result<MaterialTransaction> {
+        let action = match (kind, authority.is_some()) {
+            (TransactionKind::Receipt, _) => "factory.inventory.record_receipt",
+            (TransactionKind::Transfer, _) => "factory.inventory.record_transfer",
+            (TransactionKind::Consumption, false) => "factory.inventory.record_consumption",
+            (TransactionKind::Consumption, true) => {
+                "factory.inventory.record_production_consumption"
+            }
+            (TransactionKind::Output, _) => "factory.inventory.record_output",
+            (TransactionKind::Correction, false) => "factory.inventory.record_correction",
+            (TransactionKind::Correction, true) => "factory.inventory.record_production_correction",
+            (TransactionKind::Transform, _) => "factory.inventory.record_transform",
+        };
+        let mut client = self.db.get().await.map_err(bilibi_database::Error::from)?;
+        let mut tx = self
+            .mutations
+            .begin(&mut client, scope.mutation_context(action))
+            .await?;
+        match ledger::post(&mut tx, scope, company_id, kind, request, authority).await {
+            Ok(saved) => {
+                tx.commit().await?;
+                Ok(saved)
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// The authority itself when it is a registered contribution's payload.
+    fn registered(
+        &self,
+        authority: &'static PostingAuthority,
+    ) -> Result<Option<&'static PostingAuthority>> {
+        if self.posting_authority_registered(authority) {
+            Ok(Some(authority))
+        } else {
+            Err(Error::UnregisteredPostingAuthority)
+        }
+    }
+
+    /// Whether `authority` is a production posting authority contributed to
+    /// [`POSTING_AUTHORITIES`]: the contributed static itself, never an
+    /// equal value built elsewhere. Only a module of Inventory's own
+    /// container may contribute one; any other fails boot.
+    pub fn posting_authority_registered(&self, authority: &PostingAuthority) -> bool {
+        self.authorities
+            .iter()
+            .any(|registered| std::ptr::eq(*registered, authority))
+    }
+
+    /// Receives stock with source evidence and an optional weigh ticket. A
+    /// line may create a lot or unit identity (`identity`).
+    pub async fn record_receipt(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        self.post(scope, company_id, TransactionKind::Receipt, request, None)
+            .await
+    }
+
+    /// Moves stock between distinct locations, preserving its recorded basis
+    /// and any identity a line cites.
+    pub async fn record_transfer(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        self.post(scope, company_id, TransactionKind::Transfer, request, None)
+            .await
+    }
+
+    /// Draws stock under locks; concurrent requests cannot spend it twice.
+    /// Consumption against production context goes through
+    /// [`Inventory::record_production_consumption`].
+    pub async fn record_consumption(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Consumption,
+            request,
+            None,
+        )
+        .await
+    }
+
+    /// Consumption that may carry production context, posted by a
+    /// registered `authority`.
+    pub async fn record_production_consumption(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        let authority = self.registered(authority)?;
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Consumption,
+            request,
+            authority,
+        )
+        .await
+    }
+
+    /// Production output into stock, posted by a registered `authority`. A
+    /// line may create a lot or unit identity.
+    pub async fn record_output(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        let authority = self.registered(authority)?;
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Output,
+            request,
+            authority,
+        )
+        .await
+    }
+
+    /// Appends signed adjustments with a reason and an original transaction.
+    /// Corrections may adjust a retired material; ordinary postings may not.
+    /// A transaction that needed a posting authority is corrected through
+    /// [`Inventory::record_production_correction`].
+    pub async fn record_correction(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+    ) -> Result<MaterialTransaction> {
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Correction,
+            request,
+            None,
+        )
+        .await
+    }
+
+    /// Corrects any recorded transaction, including one that needed a
+    /// posting authority, posted by a registered `authority`.
+    pub async fn record_production_correction(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        let authority = self.registered(authority)?;
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Correction,
+            request,
+            authority,
+        )
+        .await
+    }
+
+    /// A material transform: `inputs` drawn from stock and `outputs` put
+    /// into stock, committed with their genealogy links as one transaction,
+    /// posted by a registered `authority`. Each native unit balances on its
+    /// own; one whose inputs and outputs differ records the difference as a
+    /// variance entry and needs `variance` evidence (`Variance required`),
+    /// and evidence no difference uses is `No variance`.
+    pub async fn record_transform(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        request: &PostingRequest,
+        authority: &'static PostingAuthority,
+    ) -> Result<MaterialTransaction> {
+        let authority = self.registered(authority)?;
+        self.post(
+            scope,
+            company_id,
+            TransactionKind::Transform,
+            request,
+            authority,
+        )
+        .await
+    }
+
+    /// One lot or unit identity inside the company.
+    pub async fn get_identity(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Identity> {
+        connection!(self, client);
+        genealogy::get(client, scope, company_id, identity_id).await
+    }
+
+    /// The identity's positive stock positions by location; empty once none
+    /// remains in stock.
+    pub async fn get_identity_positions(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Vec<IdentityPosition>> {
+        connection!(self, client);
+        genealogy::positions(client, scope, company_id, identity_id).await
+    }
+
+    /// Follows transform links from an output toward its source receipts.
+    pub async fn trace_backward(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Trace> {
+        connection!(self, client);
+        genealogy::trace(
+            client,
+            scope,
+            company_id,
+            identity_id,
+            genealogy::Direction::Backward,
+        )
+        .await
+    }
+
+    /// Follows transform links from a receipt toward descendant outputs.
+    pub async fn trace_forward(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Trace> {
+        connection!(self, client);
+        genealogy::trace(
+            client,
+            scope,
+            company_id,
+            identity_id,
+            genealogy::Direction::Forward,
+        )
+        .await
+    }
+
+    /// The consumptions and transforms that drew the identity, in ID order,
+    /// including consumption that created no link.
+    pub async fn list_identity_draws(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+    ) -> Result<Vec<MaterialTransaction>> {
+        connection!(self, client);
+        genealogy::draws(client, scope, company_id, identity_id).await
+    }
+
+    /// The corrections of a transaction, following corrections of
+    /// corrections, in ID order.
+    pub async fn list_corrections(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        transaction_id: i64,
+    ) -> Result<Vec<MaterialTransaction>> {
+        connection!(self, client);
+        ledger::corrections(client, scope, company_id, transaction_id).await
+    }
+
+    /// A transaction's material balance net of its corrections, per native
+    /// unit and across units; see [`Balance`].
+    pub async fn get_transaction_balance(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        transaction_id: i64,
+    ) -> Result<Balance> {
+        connection!(self, client);
+        balance::read(client, scope, company_id, transaction_id).await
+    }
+
+    pub async fn get_transaction(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        transaction_id: i64,
+    ) -> Result<MaterialTransaction> {
+        connection!(self, client);
+        ledger::get(client, scope, company_id, transaction_id).await
+    }
+
+    /// Most recent IDs first, optionally containing one item (100, at most 500).
+    pub async fn list_transactions(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<Vec<MaterialTransaction>> {
+        connection!(self, client);
+        ledger::list(client, scope, company_id, item_id, limit).await
+    }
+
+    pub async fn get_stock_position(
+        &self,
+        scope: &Scope,
+        company_id: i64,
+        item_id: i64,
+        location_id: i64,
+    ) -> Result<StockPosition> {
+        connection!(self, client);
+        ledger::position(client, scope, company_id, item_id, location_id).await
+    }
+
+    /// The shared company-defined property vocabulary for material and resource types.
+    pub fn normalize_property_definitions(
+        definitions: &[PropertyDefinition],
+    ) -> Result<Vec<PropertyDefinition>> {
+        property::normalize(definitions)
+    }
+
+    /// Validates and normalizes values with the same rules as material properties.
+    pub fn validate_property_values(
+        definitions: &[PropertyDefinition],
+        values: &Map<String, Value>,
+    ) -> Result<Map<String, Value>> {
+        property::validate(definitions, values)
+    }
+
+    /// Reads on a sibling's transaction, retaining Inventory authorization and
+    /// seeing pending writes without acquiring another pool connection.
+    pub async fn get_item_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Item> {
+        items::get(client, scope, company_id, id).await
+    }
+
+    /// Transaction-aware material read; see [`Inventory::get_item_on`].
+    pub async fn get_material_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Material> {
+        materials::get(client, scope, company_id, id).await
+    }
+
+    /// Transaction-aware unit read; see [`Inventory::get_item_on`].
+    pub async fn get_unit_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        id: i64,
+    ) -> Result<Unit> {
+        units::get(client, scope, company_id, id).await
+    }
+
     /// The company's item settings: its own overrides, else its tenant's.
     pub async fn item_settings(&self, scope: &Scope, company_id: i64) -> Result<ItemSettings> {
         connection!(self, client);
@@ -459,7 +862,7 @@ inventory::submit! {
         id: "factory/inventory",
         layer: Layer::Domains,
         dependencies: &[
-            "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
+            "base/agent_api", "base/authz", "base/database", "base/menu", "base/module_registry", "base/party_ids",
             "base/settings", "base/tenancy", "base/ui", "core/company",
         ],
         migrations: &[
@@ -471,21 +874,36 @@ inventory::submit! {
                 "factory-inventory-002-catalog",
                 include_str!("../migrations/002-catalog.sql"),
             ),
+            (
+                "factory-inventory-003-ledger",
+                include_str!("../migrations/003-ledger.sql"),
+            ),
+            (
+                "factory-inventory-004-genealogy",
+                include_str!("../migrations/004-genealogy.sql"),
+            ),
         ],
         services: &[Service {
             id: SERVICE,
             factory: |services| {
-                Ok(Arc::new(Inventory {
+                let inventory = Arc::new(Inventory {
                     db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
                     mutations: services.get("base/database.mutations")?,
                     settings: services.get("base/settings.store")?,
-                }))
+                    // Services.catalog is published after factories, as Settings notes.
+                    authorities: authority::registered(
+                        bilibi_module_registry::Catalog::discover(&bilibi_module_registry::discover()?)?
+                            .entries::<PostingAuthority>(POSTING_AUTHORITIES)?,
+                    )?,
+                });
+                agent_operations::bind(inventory.clone())?;
+                Ok(inventory)
             },
         }, Service {
-            id: pages::SERVICE,
+            id: web::SERVICE,
             factory: |services| {
                 Ok(Arc::new(bilibi_ui::page::PageService::<Scope, bilibi_database::Error>(
-                    Arc::new(pages::Pages {
+                    Arc::new(web::Pages {
                         db: services.get::<Db>("base/database.pool")?.as_ref().clone(),
                         inventory: services.get(SERVICE)?,
                     }),

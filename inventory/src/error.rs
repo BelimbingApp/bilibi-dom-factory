@@ -41,6 +41,30 @@ pub enum Error {
     MaterialNotFound,
     #[error("Material retired")]
     MaterialRetired,
+    #[error("Material has stock")]
+    MaterialHasStock,
+    #[error("Transaction not found")]
+    TransactionNotFound,
+    #[error("Request id conflict")]
+    RequestIdConflict,
+    #[error("Insufficient stock")]
+    InsufficientStock,
+    #[error("Unregistered posting authority")]
+    UnregisteredPostingAuthority,
+    #[error("Variance required")]
+    VarianceRequired,
+    #[error("No variance")]
+    NoVariance,
+    #[error("Identity not found")]
+    IdentityNotFound,
+    #[error("Identity required")]
+    IdentityRequired,
+    #[error("Invalid identity")]
+    InvalidIdentity,
+    #[error("Insufficient identity stock")]
+    InsufficientIdentityStock,
+    #[error("Insufficient unidentified stock")]
+    InsufficientUnidentifiedStock,
     #[error("Conversion not found")]
     ConversionNotFound,
     #[error("Native unit")]
