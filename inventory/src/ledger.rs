@@ -202,6 +202,19 @@ pub(crate) async fn position(
     })
 }
 
+/// The exact stock of `item` at `location` (decimal text), 0 when none. The
+/// caller has already proven access; this serves a review made inside a
+/// write's own transaction.
+pub(crate) async fn stock_text(
+    client: &impl GenericClient,
+    tenant: i64,
+    company: i64,
+    item: i64,
+    location: i64,
+) -> Result<String, Error> {
+    Ok(client.query_one("SELECT COALESCE(sum(e.native_quantity),0)::text FROM factory_inventory_transaction_entries e JOIN factory_inventory_materials m ON m.company_id=e.company_id AND m.id=e.material_id WHERE e.tenant_id=$1 AND e.company_id=$2 AND m.item_id=$3 AND e.location_id=$4 AND e.role='stock'", &[&tenant,&company,&item,&location]).await?.get(0))
+}
+
 async fn location_exists(
     client: &impl GenericClient,
     tenant: i64,
