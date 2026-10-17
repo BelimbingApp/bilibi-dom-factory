@@ -145,7 +145,7 @@ impl Floor {
         self.measure_correction = None;
         self.order = None;
         self.run = None;
-        self.labour = super::labour::Labour::new()?;
+        self.labour.reset_drafts();
         self.runs.clear();
         self.clear_run();
         let Ok(company) = s::company(scope) else {

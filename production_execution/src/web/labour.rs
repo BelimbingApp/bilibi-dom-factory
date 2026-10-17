@@ -30,14 +30,8 @@ impl Labour {
             summary: Value::Null,
             users: vec![],
             own: 0,
-            clock: s::draft(&[("role_id", ""), ("worker_user_id", "")]),
-            entry: s::draft(&[
-                ("role_id", ""),
-                ("worker_user_id", ""),
-                ("started_at", ""),
-                ("stopped_at", ""),
-                ("note", ""),
-            ]),
+            clock: Self::clock_draft(),
+            entry: Self::entry_draft(),
             correcting: None,
             correction: HashMap::new(),
             columns: ListColumns::mount(
@@ -57,6 +51,24 @@ impl Labour {
             )
             .map_err(|_| Error::Internal)?,
         })
+    }
+    fn clock_draft() -> HashMap<String, String> {
+        s::draft(&[("role_id", ""), ("worker_user_id", "")])
+    }
+    fn entry_draft() -> HashMap<String, String> {
+        s::draft(&[
+            ("role_id", ""),
+            ("worker_user_id", ""),
+            ("started_at", ""),
+            ("stopped_at", ""),
+            ("note", ""),
+        ])
+    }
+    pub(super) fn reset_drafts(&mut self) {
+        self.clock = Self::clock_draft();
+        self.entry = Self::entry_draft();
+        self.correcting = None;
+        self.correction.clear();
     }
     fn worker(&self, id: i64) -> String {
         if id == self.own {
@@ -287,8 +299,8 @@ impl Floor {
                 self.success = Some(message.into());
                 // Reset only the submitted draft. Other in-progress forms retain their values.
                 match kind {
-                    "clock_in" => self.labour.clock = Labour::new()?.clock,
-                    "save_labour_entry" => self.labour.entry = Labour::new()?.entry,
+                    "clock_in" => self.labour.clock = Labour::clock_draft(),
+                    "save_labour_entry" => self.labour.entry = Labour::entry_draft(),
                     "save_labour_correction" => self.labour.correcting = None,
                     _ => {}
                 }
