@@ -1,0 +1,12 @@
+{#- An editor or publish form inside its card. `fields` are rendered controls;
+    `submit` is the primary button label, `cancel` an optional Cancel. -#}
+{%- import "components.html" as ui -%}
+{%- import "forms.html" as form -%}
+<form id="{{ form_id }}" data-event="{{ event }}" class="space-y-4 p-4">
+{% for field in fields %}{% call form::input(field=field) %}{% endcall %}
+{% endfor %}
+<div class="flex gap-2">
+{% call ui::button(variant=bilibi_ui::ButtonVariant::Primary, button_type="submit") %}{{ submit }}{% endcall %}
+{% if cancel %}{% call ui::button(button_type="button", event="cancel") %}Cancel{% endcall %}{% endif %}
+</div>
+</form>

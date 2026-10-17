@@ -1,0 +1,12 @@
+{#- One Product Definition page (Bilimbi `Bilimbi.Factory.ProductDefinition.Web.*Live`
+    render): flash outlet, page header and the screen's own fragments, which
+    src/web renders through the shared models. The shell has no flash outlet,
+    so the page renders its own. -#}
+{%- import "components.html" as ui -%}
+{%- import "feedback.html" as feedback -%}
+{% call feedback::flash_group(messages=flash) %}{% endcall %}
+{% call ui::page(id=id) %}
+{% call ui::header(subtitle=subtitle, actions=actions) %}{{ title }}{% endcall %}
+{{ body|safe }}
+{% endcall %}
+{{ dialog|safe }}

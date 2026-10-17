@@ -2,7 +2,7 @@
 
 `ProductDefinition` owns resources, products and immutable formula/routing
 revisions. Resolve `SERVICE` (`factory/product_definition.product_definition`)
-from the service registry. This is XD1; pages and menu entries arrive in XD2.
+from the service registry. XD1 is the facade below; XD2 adds the pages.
 It mirrors Bilimbi `ProductDefinition` at
 `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 
@@ -43,6 +43,30 @@ Every write rechecks `.manage` and the authorized writable company inside
 company data. Quantities become decimal strings. Resource properties use the
 same definitions, normalization and validation as material properties.
 
+## Pages
+
+Three live pages, mirroring Bilimbi `ProductDefinition.Web.*Live`, each a
+`FlexTable` with the built-in column settings, drag reorder and compact rows
+(Bilimbi's lists have no sort, filter or pager, so these have none). The route
+guard needs `factory.product-definition.configuration.view` on every request
+and live event; every write-shaped event asks for `.manage` again and the
+facade asks once more. A view-only account sees the lists without controls.
+
+| Route | Page | Writes (flash) |
+| --- | --- | --- |
+| `/factory/resource-types` | Resource types (no menu item; the Resources page links to it) | New, Edit (code, name, property definitions as JSON), Retire behind a confirmation. "Resource type saved." / "Resource type retired." |
+| `/factory/resources` | Resources (menu: Factory → Resources) | New, Edit (type fixed), Retire behind a confirmation. "Resource saved." / "Resource retired." |
+| `/factory/definitions` | BOM formulas & routings (menu: Factory → BOM formulas & routings) | Create a product definition for an item, then Revisions: publish a formula or routing version from JSON. "Product definition created." / "Formula revision published." / "Routing revision published." |
+
+Differences from Bilimbi, all deliberate: retire asks through the Platform's
+`ConfirmDialog` rather than `data-confirm`; the inline error is the Platform's
+alert; a form's JSON that does not decode is shown as "Property definitions is
+invalid" / "Properties is invalid" (Bilimbi hands the raw text to a changeset),
+and for revisions it reaches the facade as text so it answers "Invalid lines" /
+"Invalid operations" as in Bilimbi. Item choices come from Inventory's
+`list_items` (at most 500, as Bilimbi). An account with no company sees
+"Company not found" (Bilimbi's nil `company_id`).
+
 ## Inventory and history
 
 Publication checks materials and units through Inventory on the **same
@@ -63,6 +87,9 @@ cross-container dependency. Revisions have no edit/delete API, and PostgreSQL
 also refuses UPDATE, DELETE and TRUNCATE (stronger than the reference's
 facade-only immutability). Every saved row is audited with complete old/new data.
 There are no production seeds, agent operations, CSS or JavaScript.
+
+The pages are private (`src/web`); the crate exports only the facade and its
+service ID. Page proof: the container README's `product-definition-pages`.
 
 ## Runtime proof
 

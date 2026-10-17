@@ -18,6 +18,10 @@ path = "src/product_definition.rs"
 name = "genealogy"
 path = "src/genealogy.rs"
 
+[[bin]]
+name = "product-definition-pages"
+path = "src/product_definition_pages.rs"
+
 [workspace]
 
 [dependencies]
@@ -28,6 +32,7 @@ bilibi-factory-inventory = { path = "../../inventory" }
 bilibi-factory-product-definition = { path = "../../product_definition" }
 bilibi-walkthrough-fixture = { path = "../../../../../fixtures/walkthrough" }
 bilibi-web = { path = "../../../../web" }
+axum = "0.8"
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7"
