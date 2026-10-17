@@ -5,7 +5,7 @@ use super::Pages;
 use crate::{contributions::MANAGE, NewResourceType, ResourceType, ResourceTypeUpdate};
 use bilibi_factory_inventory::PropertyDefinition;
 use bilibi_tenancy::Scope;
-use bilibi_ui::{Button, ConfirmDialog, CreateButton, FlexRow, Html, ListColumns};
+use bilibi_ui::{Button, ButtonVariant, ConfirmDialog, FlexRow, Html, ListColumns};
 use serde_json::{json, Value};
 
 const DENIED: &str = "You do not have permission to manage resource types.";
@@ -339,11 +339,13 @@ impl Types {
             ..bilibi_ui::Card::default()
         })?);
         let actions = if self.can_manage {
-            s::render(CreateButton {
-                noun: "type",
+            s::render(Button {
+                variant: ButtonVariant::Primary,
                 id: "new-resource-type",
+                button_type: "button",
                 event: "new",
-                ..CreateButton::default()
+                body: Html::text("New type"),
+                ..Button::default()
             })?
         } else {
             Html::EMPTY

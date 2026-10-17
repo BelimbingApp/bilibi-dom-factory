@@ -10,7 +10,7 @@ with the same module IDs, capability keys, table names and wording.
 | Module | Descriptor ID | Crate | State |
 | --- | --- | --- | --- |
 | [`inventory/`](inventory/README.md) | `factory/inventory` | `bilibi-factory-inventory` | units, stock locations and item settings (X0); item catalog (XI1); audited Material Transaction ledger, weighed receipts, transfers, consumption, corrections and stock reads (XI2); lot and unit genealogy, transforms, balances and the production posting authority (XI3); pages follow |
-| [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); pages follow in XD2 |
+| [`product_definition/`](product_definition/README.md) | `factory/product_definition` | `bilibi-factory-product-definition` | resource types, resources, products and immutable formula/routing revisions (XD1); Resource types, Resources and BOM formulas & routings pages (XD2) |
 | `production_execution/` | `factory/production_execution` | `bilibi-factory-production-execution` | not yet ported |
 
 Factory declares no dependency on any other Domain container, and no Domain
@@ -82,6 +82,15 @@ Bilimbi's tests declare `TestPostingAuthority`) and checks identities with
 dimensions, transforms with per-unit variance, traces, draws, corrections,
 per-unit and cross-unit balances, the authority registry's boot refusals,
 access and PostgreSQL refusals; it exits nonzero on an unexpected result.
+
+For XD2, the pages: on a separate freshly migrated disposable database run
+`BILIBI_FACTORY_FIXTURE=disposable APP_ORIGIN=http://localhost:3020 BIND_ADDR=127.0.0.1:3020 cargo run --bin product-definition-pages`
+from the same fixture folder. It installs the fixture accounts, one unit and two
+items, and serves the composed app; sign in at `http://localhost:3020` (use
+`localhost`, the origin the session cookie is issued for) as
+`manager@example.test` (manages) or `viewer@example.test` (reads), password
+`bilibi-dev`, and open Administration → Factory → Resources, BOM formulas &
+routings, or `/factory/resource-types`.
 
 For XD1, use a separate freshly migrated disposable database and run
 `BILIBI_FACTORY_FIXTURE=disposable cargo run --bin product-definition` from

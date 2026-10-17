@@ -5,7 +5,7 @@ use super::Pages;
 use crate::{contributions::MANAGE, NewResource, Resource, ResourceType, ResourceUpdate};
 use bilibi_tenancy::Scope;
 use bilibi_ui::{
-    Button, Choice, ConfirmDialog, CreateButton, Field, FlexRow, Html, InputKind, ListColumns,
+    Button, ButtonVariant, Choice, ConfirmDialog, Field, FlexRow, Html, InputKind, ListColumns,
 };
 use serde_json::{Map, Value};
 
@@ -375,11 +375,13 @@ impl Resources {
         })?;
         if self.can_manage {
             actions.push(&Html::raw(" "));
-            actions.push(&s::render(CreateButton {
-                noun: "resource",
+            actions.push(&s::render(Button {
+                variant: ButtonVariant::Primary,
                 id: "new-resource",
+                button_type: "button",
                 event: "new",
-                ..CreateButton::default()
+                body: Html::text("New resource"),
+                ..Button::default()
             })?);
         }
         let dialog = match self.pending_retire {
