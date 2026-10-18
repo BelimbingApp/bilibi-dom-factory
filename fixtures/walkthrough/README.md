@@ -7,6 +7,7 @@ From a real Platform mount, migrate a fresh disposable PostgreSQL 18 database, t
 ```sh
 cp ../../../../../Cargo.lock .
 BILIBI_FACTORY_FIXTURE=disposable \
+  BILIBI_ENV=development \
   CARGO_TARGET_DIR=/path/to/platform/target \
   DATABASE_URL=postgres://…/disposable_factory \
   APP_ORIGIN=http://localhost:35605 BIND_ADDR=127.0.0.1:35605 \
@@ -14,6 +15,8 @@ BILIBI_FACTORY_FIXTURE=disposable \
 ```
 
 Sign in at the exact `APP_ORIGIN` as `manager@example.test` or `viewer@example.test`, using the Platform walkthrough password. The manager has Factory configuration, capture and supervisor permissions; the viewer can read the twelve routes and has no Factory writes. Both belong to Company 001. Existing direct grants still take precedence, including denies installed by other walkthroughs.
+
+Set `BILIBI_ENV=development` for the disposable walkthrough commands too. Their permission-change proofs use authenticated administrative grants; the current Platform otherwise requires an enrolled second factor for those writes.
 
 Capture the empty routes before adding records: `materials`, `material-types`, `units`, `conversions`, `item-settings`, `resource-types`, `resources`, `definitions`, `floor`, `wastage-reasons`, `labour-roles`, and `measurement-types`, all under `/factory/`. Use both themes at 1440 × 1000 for the R1 reference, then a 768 × 1024 touch viewport for floor interactions. Keep screenshots, snapshots and comparisons outside the repository.
 

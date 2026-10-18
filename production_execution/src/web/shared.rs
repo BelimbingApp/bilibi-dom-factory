@@ -149,9 +149,14 @@ pub(super) struct Picker<'a> {
 }
 
 // Presentation only: keep arbitrary precision quantities as text.
-fn quantity(value: &str) -> &str {
+pub(super) fn quantity(value: &str) -> &str {
     if value.contains('.') {
-        value.trim_end_matches('0').trim_end_matches('.')
+        let value = value.trim_end_matches('0').trim_end_matches('.');
+        if value == "-0" {
+            "0"
+        } else {
+            value
+        }
     } else {
         value
     }

@@ -51,6 +51,7 @@ Three live pages, mirroring Bilimbi `ProductDefinition.Web.*Live`, each a
 guard needs `factory.product-definition.configuration.view` on every request
 and live event; every write-shaped event asks for `.manage` again and the
 facade asks once more. A view-only account sees the lists without controls.
+After a management grant is revoked, a refused write keeps its permission message visible while the selected product's revisions reload.
 
 | Route | Page | Writes (flash) |
 | --- | --- | --- |
