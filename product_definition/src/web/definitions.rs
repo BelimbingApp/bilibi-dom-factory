@@ -185,8 +185,9 @@ impl Definitions {
             _ => return Err(bilibi_database::Error::Invalid),
         }
         if !s::can(&self.pages.db, scope, MANAGE).await? {
+            self.load(scope).await?;
             self.notice.fail(DENIED);
-            return self.load(scope).await;
+            return Ok(());
         }
         match kind {
             "create_product" => self.create_product(scope, payload).await?,
