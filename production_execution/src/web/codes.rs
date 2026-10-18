@@ -184,7 +184,15 @@ impl Codes {
                         "target",
                     ]
                     .into_iter()
-                    .map(|k| (k.into(), s::text(row, k).into()))
+                    .map(|k| {
+                        let value = s::text(row, k);
+                        let value = if matches!(k, "minimum" | "maximum" | "target") {
+                            s::quantity(value)
+                        } else {
+                            value
+                        };
+                        (k.into(), value.into())
+                    })
                     .collect();
                 } else {
                     self.error = Some(format!("{} not found.", self.kind.noun()));
@@ -350,7 +358,7 @@ impl Codes {
                     )),
                 );
                 for key in ["minimum", "target", "maximum"] {
-                    row = row.cell(key, Cell::text(s::text(v, key)));
+                    row = row.cell(key, Cell::text(s::quantity(s::text(v, key))));
                 }
             }
             if self.manage {

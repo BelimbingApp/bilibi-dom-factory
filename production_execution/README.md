@@ -158,6 +158,8 @@ On a disposable migrated database, run the existing `production-execution` and `
 
 `/factory/wastage-reasons`, `/factory/labour-roles` and `/factory/measurement-types` sit under Factory administration and require `configuration.view`. They share the private `src/web/codes.rs` adapter with FlexTable/ListColumns, new/edit forms and activate/deactivate actions. Every write-shaped event rechecks `configuration.manage`; the facade checks again in its mutation. Code, measurement value type and unit stay fixed while labels and measurement limits can change. New limits affect new measurements only. Form submits are named `save_entry` because the Platform reserves `save` for Company edits.
 
+Measurement type limits use normalized decimal text in the list and editor, matching Bilimbi's `limit/1`. Formatting uses the exact stored text through `src/web/shared.rs`.
+
 Run `labour-pages` after `floor-pages` on the same disposable database for XP4. It exercises the registered page adapter with real sessions: all three configuration create/edit/activation flows, immutable-field forgery, restricted/stale grants, own and supervisor clocks, retry, finished intervals in company time, corrections and recomputed totals, malformed time and archived company refusals. Set `BILIBI_FLOOR_SERVE=yes APP_ORIGIN=http://localhost:35594 BIND_ADDR=127.0.0.1:35594` to keep that app running for browser proof.
 
 ## Reviewed production operations (H6)

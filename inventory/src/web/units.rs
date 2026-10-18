@@ -160,6 +160,7 @@ impl Units {
         let manage = ctx.can_manage().await?;
         let mut actions = link("Item settings", "/factory/item-settings")?;
         if manage {
+            actions.push(&text(" "));
             actions.push(&primary("new-unit", "New unit", "new")?);
         }
         let mut body = Html::EMPTY;
