@@ -60,7 +60,9 @@ and conversion factors are decimal strings and results carry exact decimal
 strings, never floats. Reads need `factory.inventory.configuration.view`,
 writes `factory.inventory.configuration.manage`; each calls the facade's own
 code, so company authorization, the writable-company lock and refusal texts
-are the facade's.
+are the facade's. Every operation serves every door (`channels: every`) and
+lists no step-up: Factory declares no Base Step-up operation, as Bilimbi has
+none.
 
 | Key | Kind | Does |
 | --- | --- | --- |

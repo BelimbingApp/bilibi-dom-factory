@@ -132,6 +132,9 @@ async fn main() -> Result<(), Error> {
     let db = bilibi_database::pool(&std::env::var("DATABASE_URL")?)?;
     let origin = std::env::var("APP_ORIGIN").unwrap_or_else(|_| "http://localhost:35593".into());
     let app = bilibi_web::App::new(db.clone(), &origin)?;
+    // Grants ask for Base Step-up and no fixture account enrolls an
+    // authenticator: turn enforcement off, as `BILIBI_ENV=development` does.
+    app.step_up.set_enforced(false);
     let manager = login(&app, "manager@example.test").await?;
     let admin = login(&app, "admin@example.test").await?;
     let viewer = login(&app, "viewer@example.test").await?;

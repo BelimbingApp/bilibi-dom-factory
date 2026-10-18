@@ -23,8 +23,8 @@ use crate::{
 };
 use bilibi_agent_api::{
     json::{Data, Output},
-    Definitions, Guide, Handler, Operation, OperationClient, OperationFuture, ReadHandler,
-    WriteHandler, DEFINITIONS,
+    Channels, Definitions, Guide, Handler, Operation, OperationClient, OperationFuture,
+    ReadHandler, WriteHandler, DEFINITIONS,
 };
 use bilibi_database::MutationTransaction;
 use bilibi_module_registry::{Contribution, Provenance};
@@ -776,12 +776,12 @@ fn posted_output() -> Value {
 
 macro_rules! read {
     ($key:literal, $title:literal, $summary:literal, [$($keyword:literal),*], $input:ident, $output:ident, $handler:expr) => {
-        Operation { key:$key, title:$title, summary:$summary, keywords:&[$($keyword),*], capability:CONFIGURATION_VIEW, input:$input, output:$output, handler:Handler::Read(&$handler) }
+        Operation { key:$key, title:$title, summary:$summary, keywords:&[$($keyword),*], capability:CONFIGURATION_VIEW, input:$input, output:$output, handler:Handler::Read(&$handler), channels:Channels::Every, step_up:&[] }
     };
 }
 macro_rules! write {
     ($key:literal, $title:literal, $summary:literal, [$($keyword:literal),*], $input:ident, $output:ident, $handler:expr) => {
-        Operation { key:$key, title:$title, summary:$summary, keywords:&[$($keyword),*], capability:CONFIGURATION_MANAGE, input:$input, output:$output, handler:Handler::SafeWrite(&$handler) }
+        Operation { key:$key, title:$title, summary:$summary, keywords:&[$($keyword),*], capability:CONFIGURATION_MANAGE, input:$input, output:$output, handler:Handler::SafeWrite(&$handler), channels:Channels::Every, step_up:&[] }
     };
 }
 

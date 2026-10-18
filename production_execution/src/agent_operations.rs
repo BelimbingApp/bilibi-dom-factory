@@ -7,8 +7,8 @@ use crate::{
     Order, OrderKind, ProductionExecution, Source,
 };
 use bilibi_agent_api::{
-    Definitions, Guide, Handler, Operation, OperationClient, OperationFuture, ReadHandler,
-    WriteHandler, DEFINITIONS,
+    Channels, Definitions, Guide, Handler, Operation, OperationClient, OperationFuture,
+    ReadHandler, WriteHandler, DEFINITIONS,
 };
 use bilibi_database::MutationTransaction;
 use bilibi_module_registry::{Contribution, Provenance};
@@ -523,6 +523,8 @@ macro_rules! read {
             input: $input,
             output: $output,
             handler: Handler::Read(&Read::$handler),
+            channels: Channels::Every,
+            step_up: &[],
         }
     };
 }
@@ -535,8 +537,8 @@ inventory::submit! { Contribution::new(DEFINITIONS,"factory/production_execution
         read!("factory.production_execution.execution.list","List an order's completed operations",order_id,list_output,Executions),
         read!("factory.production_execution.execution.get","Read a completed operation",execution_id,record_output,Execution),
         read!("factory.production_execution.hold_override.list","Read an execution's material hold overrides",execution_id,list_output,Overrides),
-        Operation {key:"factory.production_execution.order.create",title:"Create a production order",summary:"Create an order or batch with exact published formula and routing versions.",keywords:&["production","order","batch","create"],capability:MANAGE,input:order_input,output:record_output,handler:Handler::SafeWrite(&Write::Order)},
-        Operation {key:"factory.production_execution.operation.complete",title:"Complete a production operation",summary:"Record live or imported completion, material effects and hold evidence in one audited transaction, idempotently by request_id.",keywords:&["production","operation","complete","import","run","hold","override"],capability:MANAGE,input:complete_input,output:record_output,handler:Handler::SafeWrite(&Write::Complete)},
+        Operation {key:"factory.production_execution.order.create",title:"Create a production order",summary:"Create an order or batch with exact published formula and routing versions.",keywords:&["production","order","batch","create"],capability:MANAGE,input:order_input,output:record_output,handler:Handler::SafeWrite(&Write::Order),channels:Channels::Every,step_up:&[]},
+        Operation {key:"factory.production_execution.operation.complete",title:"Complete a production operation",summary:"Record live or imported completion, material effects and hold evidence in one audited transaction, idempotently by request_id.",keywords:&["production","operation","complete","import","run","hold","override"],capability:MANAGE,input:complete_input,output:record_output,handler:Handler::SafeWrite(&Write::Complete),channels:Channels::Every,step_up:&[]},
     ],
     guides:&[Guide {key:"factory.production_execution",title:"Production operations",summary:"Create orders, complete routed operations and read hold evidence.",keywords:&["production","order","operation","run","import","hold"],capability:FLOOR_VIEW,
         body:"Every operation names company_id. Find orders with order.list and order.get; find completed runs with execution.list and execution.get (all under factory.production_execution). order.create and operation.complete are reviewed safe writes: preview, obtain the person's approval, then commit the exact inputs with the single-use plan code. Direct writes are refused. Creating an order requires exact published product_id/formula_version/routing_version; its code is company-unique, not an idempotency key. Commit it before completing its generated order_id.\n\nCompletion source is live or import; both use the same validations. Import additionally requires factory.production-execution.import, including on retries. Writes require configuration.manage and the Product Definition and Inventory view/manage grants used by the facade; reads require floor.view. operator_type/operator_id attribute the work, never authorize it. started_at and completed_at have offsets; completion cannot be in the future. Inputs and outputs name allowed operation items and a resource allowed by its routing. At least one side is nonempty. Quantities are exact decimal strings. Omitted unit_id means the immutable native unit; every non-native unit requires an explicit conversion_version so a later conversion cannot change the review. A transform's variance is either {shared:{evidence,reconciliation_basis}} or {units:[{unit_id,evidence,reconciliation_basis}]}.\n\nOutput lines may create a lot/unit identity with kind, code and dimensions; later lines cite identity_id. Previews use symbolic created identities, never predicted IDs. Commit returns resolved identity IDs in entries; inventory_transaction_id also leads to factory.inventory.transaction.get.\n\nHeld inputs must name an identity with valid source evidence. An early draw requires material-hold.override. A live hold_override carries only reason: recorder and approver come from Scope and its time is assigned at recording. Import also requires historical occurred_at (not after completion) and evidence, and may name an historical approver (kind user with id, or agent with id and acting_for_user_id). Historical approver is evidence only. No caller may name the recorder; impersonated overrides are refused. hold_override.list returns the immutable evidence.\n\nCompletion request_id is company-unique (240 bytes). Identical retries return the original without reposting; different content conflicts. Import authorization is always rechecked, while recorded retries do not reauthorize historical holds. Plans commit all operations or none, but preview each against committed data; commit newly generated IDs in an earlier plan. Multiple individually feasible draws can fail collectively, rolling back the whole plan. Reviews execute the real owner path then roll back business and audit writes; PostgreSQL sequence allocations may leave gaps."}],

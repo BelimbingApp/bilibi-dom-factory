@@ -61,6 +61,9 @@ async fn main() -> Result<(), Error> {
     }
     let db = bilibi_database::pool(&std::env::var("DATABASE_URL")?)?;
     let app = bilibi_web::App::new(db.clone(), "http://localhost:35591")?;
+    // Grants ask for Base Step-up and no fixture account enrolls an
+    // authenticator: turn enforcement off, as `BILIBI_ENV=development` does.
+    app.step_up.set_enforced(false);
     let pe = app
         .services
         .get::<ProductionExecution>(bilibi_factory_production_execution::SERVICE)?;
