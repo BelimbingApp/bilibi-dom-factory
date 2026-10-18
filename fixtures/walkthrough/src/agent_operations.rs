@@ -143,6 +143,9 @@ async fn main() -> Result<(), Error> {
         db.clone(),
         "http://localhost:35592",
     )?));
+    // Grants ask for Base Step-up and no fixture account enrolls an
+    // authenticator: turn enforcement off, as `BILIBI_ENV=development` does.
+    app.step_up.set_enforced(false);
     let grants = app.services.get::<Grants>("base/authz.grants")?;
     grants.reconcile().await?;
     let plans = app.services.get::<Plans>("base/agent_api.plans")?;

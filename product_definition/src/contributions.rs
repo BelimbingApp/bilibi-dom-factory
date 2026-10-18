@@ -59,3 +59,12 @@ page_route!(
     "/factory/definitions",
     "definitions"
 );
+
+// ADR 01 gap, listed so it stays visible: these pages still write through
+// the Product Definition facade rather than an operation contract.
+inventory::submit! { Contribution::new(bilibi_module_registry::contributions::PAGE_WRITES,crate::PAGES,Provenance {
+    module:"factory/product_definition",source:file!(),line:line!(),
+}, &bilibi_module_registry::contributions::PageWrites {
+    service:crate::PAGES,contracts:&[],
+    pending:bilibi_module_registry::contributions::Pending::Every {reason:"Resource types, resources, products and formula and routing publication write through the Product Definition facade; no contract yet."},
+}) }

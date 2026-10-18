@@ -111,3 +111,14 @@ inventory::submit! { Contribution::new(
         access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
     }
 ) }
+
+// ADR 01 gap, listed so it stays visible: these pages still write through
+// the Production Execution facade rather than an operation contract.
+inventory::submit! { Contribution::new(
+    bilibi_module_registry::contributions::PAGE_WRITES,crate::PAGES,
+    Provenance {module:"factory/production_execution",source:file!(),line:line!()},
+    &bilibi_module_registry::contributions::PageWrites {
+        service:crate::PAGES,contracts:&[],
+        pending:bilibi_module_registry::contributions::Pending::Every {reason:"Labour, wastage and measurement capture and their corrections, and wastage reason, labour role and measurement type configuration, write through the Production Execution facade; no contract yet."},
+    }
+) }

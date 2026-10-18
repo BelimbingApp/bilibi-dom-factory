@@ -59,6 +59,9 @@ async fn main() -> Result<(), Error> {
     let db = bilibi_database::pool(&std::env::var("DATABASE_URL")?)?;
     bilibi_walkthrough_fixture::install(&db).await?;
     let app = bilibi_web::App::new(db.clone(), "http://localhost:35591")?;
+    // Grants ask for Base Step-up and no fixture account enrolls an
+    // authenticator: turn enforcement off, as `BILIBI_ENV=development` does.
+    app.step_up.set_enforced(false);
     app.services
         .get::<Grants>("base/authz.grants")?
         .reconcile()

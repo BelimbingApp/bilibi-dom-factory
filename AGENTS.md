@@ -92,7 +92,7 @@ confirmations verbatim.
   genealogy facade, and a mixed-unit transform's agreement through
   `get_transaction_balance`, never by converting quantities yourself, because
   posted observations and conversion versions are the record.
-- A module's pages are a private `src/web` behind one `PageService`, with routes and menu items in its `contributions.rs`; a live event that writes re-checks its capability itself (`web/shared.rs` `can`) before calling the facade, which checks once more. Do not trust the route guard alone, because a grant can be revoked while the page is open.
+- A module's pages are a private `src/web` behind one `PageService`, with routes, menu items and its `PageWrites` (Bilibi `apps/base/agent_api/README.md`; the host refuses an undeclared live-event write at run time, not at build) in its `contributions.rs`; a live event that writes re-checks its capability itself (`web/shared.rs` `can`) before calling the facade, which checks once more. Do not trust the route guard alone, because a grant can be revoked while the page is open.
 - In facade code collect any iterator into an owned `Vec`/`HashSet` before the first `.await` (as `product_definition/src/revisions.rs` does). A borrowed iterator held across an await makes the facade's future unprovably `Send`, and a page cannot await it: rustc reports "implementation of `Send` is not general enough" at the page, far from the cause.
 - Expose an Inventory write to agents only as a reviewed safe write in
   `inventory/src/agent_operations.rs`, calling the facade's own code

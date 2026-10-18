@@ -142,3 +142,11 @@ page!(
     "/factory/materials",
     "materials"
 );
+
+// ADR 01 gap, listed so it stays visible: these pages still write through
+// the Inventory facade rather than an operation contract (`base/agent_api`).
+inventory::submit! { Contribution::new(bilibi_module_registry::contributions::PAGE_WRITES, crate::web::SERVICE, provenance!(), &bilibi_module_registry::contributions::PageWrites {
+    service: crate::web::SERVICE,
+    contracts: &[],
+    pending: bilibi_module_registry::contributions::Pending::Every { reason: "Material types, materials, units, conversions and item settings write through the Inventory facade; no contract yet." },
+}) }
