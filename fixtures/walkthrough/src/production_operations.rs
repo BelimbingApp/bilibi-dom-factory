@@ -1,7 +1,9 @@
 //! H6 runtime proof through real authenticated registry/plans and optional
 //! HTTP/MCP edges. No unit-test harness or production data. Run once against
 //! a freshly migrated disposable database; plan codes and tokens stay private.
-use bilibi_agent_access::{AgentAccess, AuthorizeParams, CodeExchange, Decision, CLIENT_ID};
+use bilibi_agent_access::{
+    AgentAccess, AuthorizeParams, ClientRegistration, CodeExchange, Decision, CLIENT_ID,
+};
 use bilibi_agent_api::{
     plans::{PlanAuthority, PlanIdentity, PlannedOperation, Plans},
     Registry, SearchOptions,
@@ -683,7 +685,10 @@ async fn main() -> Result<(), Error> {
     if let Ok(api) = std::env::var("BILIBI_FACTORY_API") {
         over_http(app, &manager, &api, order_input, base).await?;
     }
-    println!("production operations walkthrough complete; counts orders/executions/postings/entries/identities/overrides/audit={:?}",counts(&db).await?);
+    println!(
+        "production operations walkthrough complete; counts orders/executions/postings/entries/identities/overrides/audit={:?}",
+        counts(&db).await?
+    );
     Ok(())
 }
 
@@ -798,26 +803,17 @@ async fn over_http(
             && done["results"][0]["result"]["result"]["posting_kind"] == "output",
     )?;
     let execution = done["results"][0]["result"]["result"]["execution"]["id"].clone();
-    // MCP has a distinct resource audience and requires an operator-registered
-    // PKCE client, not the HTTP API's native-device token.
-    let settings = app
-        .services
-        .get::<bilibi_settings::Settings>("base/settings.store")?;
-    let boundary = app
-        .services
-        .get::<bilibi_database::MutationBoundary>("base/database.mutations")?;
-    let admin = actor(app, "admin@example.test").await?;
-    let mut client = db.get().await?;
-    let mut tx = boundary
-        .begin(
-            &mut client,
-            admin.scope.mutation_context("factory.h6.oauth_client"),
-        )
+    // MCP has a distinct resource audience and a public, dynamically registered
+    // PKCE client, not the HTTP API's native-device token (Platform Agent Access).
+    let registration = access
+        .register_client(&serde_json::from_value::<ClientRegistration>(json!({
+            "client_name": "H6 proof", "redirect_uris": ["https://proof.example.test/callback"],
+            "token_endpoint_auth_method": "none"
+        }))?)
         .await?;
-    settings.put(&mut tx, &admin.scope, bilibi_settings::Target::Global, "agent_access.oauth_clients",
-        json!({"h6-proof":{"name":"H6 proof","redirect_uris":["https://proof.example.test/callback"]}})).await?;
-    tx.commit().await?;
-    drop(client);
+    let client_id = registration["client_id"]
+        .as_str()
+        .ok_or("registered client ID")?;
     let metadata = std::process::Command::new("curl")
         .args([
             "-fsS",
@@ -831,7 +827,7 @@ async fn over_http(
     // RFC7636 example verifier is public proof-fixture data, not a credential.
     let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     let params = AuthorizeParams {
-        client_id: "h6-proof".into(),
+        client_id: client_id.into(),
         redirect_uri: "https://proof.example.test/callback".into(),
         response_type: "code".into(),
         resource: resource.into(),
