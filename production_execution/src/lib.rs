@@ -59,7 +59,7 @@ impl ProductionExecution {
     async fn read_client(&self, scope: &Scope, company: i64) -> Result<deadpool_postgres::Object> {
         let client = self.db.get().await.map_err(bilibi_database::Error::from)?;
         bilibi_authz::authorize_key(&**client, scope, contributions::FLOOR_VIEW).await?;
-        bilibi_company::organisation::require_live(&**client, scope, company).await?;
+        bilibi_company::require_live(&**client, scope, company).await?;
         Ok(client)
     }
 
@@ -94,14 +94,8 @@ impl ProductionExecution {
         company: i64,
         new: &NewOrder,
     ) -> Result<Order> {
-        bilibi_company::organisation::authorize_target(
-            tx.sql(),
-            scope,
-            company,
-            contributions::MANAGE,
-        )
-        .await?;
-        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
+        bilibi_company::authorize_target(tx.sql(), scope, company, contributions::MANAGE).await?;
+        bilibi_company::require_writable(tx.sql(), scope, company, true).await?;
         self.product_definition
             .select_revisions_on(
                 tx.sql(),
