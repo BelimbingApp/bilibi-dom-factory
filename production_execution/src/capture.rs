@@ -224,8 +224,8 @@ pub(crate) async fn writable(
     company: i64,
     cap: &str,
 ) -> Result<()> {
-    bilibi_company::organisation::authorize_target(c, scope, company, cap).await?;
-    bilibi_company::organisation::require_writable(c, scope, company, true).await?;
+    bilibi_company::authorize_target(c, scope, company, cap).await?;
+    bilibi_company::require_writable(c, scope, company, true).await?;
     Ok(())
 }
 pub(crate) async fn time(
@@ -295,7 +295,7 @@ impl ProductionExecution {
     ) -> Result<Value> {
         let recorder = recorded(scope, company)?;
         let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
-        bilibi_company::organisation::authorize_target(&**c, scope, company, cap)
+        bilibi_company::authorize_target(&**c, scope, company, cap)
             .await
             .map_err(|_| Error::Capture("Capture not authorized"))?;
         Ok(recorder)
