@@ -316,13 +316,8 @@ impl Completer {
         if source == Source::Live {
             return Ok(());
         }
-        match bilibi_company::organisation::authorize_target(
-            client,
-            scope,
-            company,
-            crate::contributions::IMPORT,
-        )
-        .await
+        match bilibi_company::authorize_target(client, scope, company, crate::contributions::IMPORT)
+            .await
         {
             Err(bilibi_database::Error::Forbidden) => Err(Error::ImportNotAuthorized),
             other => Ok(other.map(|_| ())?),
@@ -452,9 +447,7 @@ impl Completer {
             return Ok(None);
         }
         let override_ = request.hold_override.as_ref().ok_or(Error::MaterialHeld)?;
-        match bilibi_company::organisation::authorize_target(client, scope, company, HOLD_OVERRIDE)
-            .await
-        {
+        match bilibi_company::authorize_target(client, scope, company, HOLD_OVERRIDE).await {
             Ok(_) => Ok(Some(Applied {
                 approver: override_.approver.clone(),
                 recorder: override_.recorder.clone(),
@@ -597,7 +590,7 @@ impl Completer {
         if source == Source::Live {
             bilibi_authz::authorize_key(client, scope, crate::contributions::FLOOR_VIEW).await?;
         }
-        bilibi_company::organisation::require_live(client, scope, company).await?;
+        bilibi_company::require_live(client, scope, company).await?;
         let order = orders::get_order(client, scope, company, order_id).await?;
         let selected = if source == Source::Import {
             let import = self
@@ -655,12 +648,12 @@ impl Completer {
         completion: &Completion,
     ) -> Result<(crate::Execution, bool)> {
         if source == Source::Live {
-            bilibi_company::organisation::authorize_target(tx.sql(), scope, company, MANAGE)
+            bilibi_company::authorize_target(tx.sql(), scope, company, MANAGE)
                 .await?;
         }
         self.authorize_import(tx.sql(), scope, company, source)
             .await?;
-        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
+        bilibi_company::require_writable(tx.sql(), scope, company, true).await?;
         let (order, request) = self
             .prepare(tx.sql(), scope, company, order_id, source, completion)
             .await?;
@@ -680,7 +673,7 @@ impl Completer {
         request: &Request,
         overrides: &[Applied],
     ) -> Result<(crate::Execution, bool)> {
-        use bilibi_company::organisation::{authorize_target, require_writable};
+        use bilibi_company::{authorize_target, require_writable};
         if request.source == Source::Live {
             authorize_target(tx.sql(), scope, company, MANAGE).await?;
         }
