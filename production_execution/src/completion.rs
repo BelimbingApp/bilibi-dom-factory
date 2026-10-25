@@ -258,6 +258,9 @@ fn validate(
     }
     let inputs = lines(&completion.inputs, &operation.inputs)?;
     let outputs = lines(&completion.outputs, &operation.outputs)?;
+    if source == Source::Live && outputs.iter().any(|line| line.identity_id.is_some()) {
+        return Err(bilibi_factory_inventory::Error::InvalidIdentity.into());
+    }
     let holds = hold_rules(selected, &inputs)?;
     let hold_override = completion
         .hold_override
@@ -417,9 +420,33 @@ impl Completer {
         {
             return Err(Error::InvalidHoldSource);
         }
+        let last_added = if request.source == Source::Import {
+            let import = self
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.inventory
+                .get_import_identity_last_added_on(
+                    client,
+                    &import,
+                    identity_id,
+                    request.completed_at,
+                )
+                .await?
+        } else {
+            self.inventory
+                .get_identity_last_added_on(
+                    client,
+                    scope,
+                    company,
+                    identity_id,
+                    request.completed_at,
+                )
+                .await?
+        };
+        let added_at = last_added.unwrap_or(source.effective_at);
         let age = request
             .completed_at
-            .duration_since(source.effective_at)
+            .duration_since(added_at)
             .unwrap_or_default();
         if age >= Duration::from_secs(hours as u64 * 3600) {
             return Ok(None);

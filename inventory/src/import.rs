@@ -31,6 +31,19 @@ impl Inventory {
         genealogy::get_authorized(client, import.scope(), import.company(), id).await
     }
 
+    /// When stock was last added to an identity at or before `until`, for an
+    /// import's hold age.
+    pub async fn get_import_identity_last_added_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        id: i64,
+        until: std::time::SystemTime,
+    ) -> Result<Option<std::time::SystemTime>, Error> {
+        import.authorize_on(client).await?;
+        genealogy::last_added_authorized(client, import.scope(), import.company(), id, until).await
+    }
+
     /// Read immutable posting evidence needed by an import.
     pub async fn get_import_transaction_on(
         &self,

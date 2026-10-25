@@ -208,18 +208,11 @@ posts, retries, permissions, retirement and PostgreSQL refusals, and its
 
 ## Lot and unit identities
 
-A receipt, production output or transform output line may create an identity
-with `identity: NewIdentity { kind: Lot | Unit, code, dimensions }`. The code
-is unique for that material in the company ("Code has already been taken")
-and never changes. A later transfer, consumption, correction or transform
-input line cites it by `identity_id`; a transform output always creates a
-fresh one. When a transform uses any identity every input and output must be
-identified (`Identity required`); creating one on a draw, citing one on a
-receipt, output or transform output, or both on one line is `Invalid
-identity`, and an identity of another material or company is `Identity not
-found`. Before a draw Inventory checks the location's whole stock (`Insufficient
-stock`), then the cited identity's stock there (`Insufficient identity stock`),
-or else the unidentified pool (`Insufficient unidentified stock`).
+A receipt, production output or transform output line may create an identity with `identity: NewIdentity { kind: Lot | Unit, code, dimensions }`. The code is unique for that material in the company ("Code has already been taken") and never changes. A later transfer, consumption, correction, production output or transform line cites it by `identity_id`. **A production output or transform output citing an existing identity adds its quantity to that identity's stock**; it does not replace a previous posting or change the identity's code, kind, dimensions or original source transaction. Output and transform postings still require a registered production authority. Production Execution cites an existing output identity for an import completion only; a live completion doing so is `Invalid identity`, as before.
+
+When a transform uses any identity every input and output must be identified (`Identity required`). Creating one on a draw, citing one on a receipt, or specifying both `identity` and `identity_id` on one line is `Invalid identity`. An identity of another material, company or tenant is `Identity not found`. Before a draw Inventory checks the location's whole stock (`Insufficient stock`), then the cited identity's stock there (`Insufficient identity stock`), or else the unidentified pool (`Insufficient unidentified stock`). Additions in the same posting cannot cover its withdrawals. Transform links include outputs citing existing identities, so traces retain the additional inputs. A hold on a later draw ages from the identity's latest receipt, output or transform addition (`get_identity_last_added_on`), not its first posting, so added quantity is never treated as aged.
+
+This intentionally extends Bilimbi `Inventory.Ledger.validate_identities`, which refuses an existing identity on a positive output. It uses the same locked planning, ownership checks, append-only entries, genealogy and audit path; no schema change or identity merge is needed.
 
 A unit (not a lot) may carry one to three `dimensions`, `width`, `length` and
 `thickness`, each a positive `value` of at most 12 decimal places, a `unit`
@@ -294,6 +287,10 @@ pooled reads. Use them while holding a mutation's company lock; acquiring a
 second connection could exhaust the pool with concurrent writers.
 `normalize_property_definitions` and `validate_property_values` expose the
 shared property contract through Inventory, without exposing private helpers.
+`get_identity_last_added_on` reads when an identity last received stock, on a
+caller's client, for hold ages; `get_import_identity_last_added_on` is its
+import-sealed form, checking only the import grant like the other `get_import_*`
+reads.
 
 ## Settings
 

@@ -575,8 +575,11 @@ async fn variance(
 }
 
 /// An identity is created only by a positive receipt, output or transform
-/// output, and cited only by a later movement of its own material. A
-/// transform that uses any identity identifies every line.
+/// output, and cited only by a movement of its own material. Unlike Bilimbi's
+/// Inventory.Ledger, production outputs may add to an existing identity, so
+/// imports can reuse an output lot without changing its immutable metadata;
+/// Production Execution refuses that on a live completion.
+/// A transform that uses any identity identifies every line.
 async fn validate_identities(
     tx: &mut MutationTransaction<'_>,
     tenant: i64,
@@ -592,8 +595,7 @@ async fn validate_identities(
         || stock
             .iter()
             .any(|e| creates(e) && !(!e.negative() && matches!(kind, Receipt | Output | Transform)))
-        || (matches!(kind, Receipt | Output) && stock.iter().any(cites))
-        || (kind == Transform && stock.iter().any(|e| !e.negative() && cites(e)))
+        || (kind == Receipt && stock.iter().any(cites))
     {
         return Err(Error::InvalidIdentity);
     }
