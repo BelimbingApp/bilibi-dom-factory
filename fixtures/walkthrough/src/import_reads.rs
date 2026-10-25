@@ -218,31 +218,56 @@ pub(super) async fn run(
             &[],
         )
         .await?;
+    verify(
+        "archived company preserves import material evidence",
+        importer.get_material(material).await?.item_id == material,
+    )?;
+    verify(
+        "archived company preserves exact import conversion evidence",
+        importer
+            .get_conversion(material, unit.id, first.version)
+            .await?
+            == first,
+    )?;
+    verify(
+        "archived company preserves import run yield",
+        importer.get_run_yield(execution).await?.execution_id == execution,
+    )?;
+    verify(
+        "archived company preserves import backward trace",
+        importer.trace_backward(identity).await?.material.root.id == identity,
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET deleted_at=now() WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
     refusal(
         "material import read rechecks live company",
         importer.get_material(material).await,
-        "archived",
+        "Not found",
     )?;
     refusal(
         "conversion import read rechecks live company",
         importer
             .get_conversion(material, unit.id, first.version)
             .await,
-        "archived",
+        "Not found",
     )?;
     refusal(
         "yield import read rechecks live company",
         importer.get_run_yield(execution).await,
-        "archived",
+        "Not found",
     )?;
     refusal(
         "trace import read rechecks live company",
         importer.trace_backward(identity).await,
-        "archived",
+        "Not found",
     )?;
     client
         .execute(
-            "UPDATE companies SET status='active' WHERE tenant_id=1 AND id=1",
+            "UPDATE companies SET status='active', deleted_at=NULL WHERE tenant_id=1 AND id=1",
             &[],
         )
         .await?;

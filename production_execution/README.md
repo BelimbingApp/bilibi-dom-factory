@@ -70,7 +70,7 @@ Replace the remaining import reads with `Importer::get_material(item_id)`, `Impo
 
 After updating and proving the complete import, read and retry flow, remove the five additional Factory grants from the principal declaration and its installed grants: `factory.production-execution.configuration.manage`, `factory.production-execution.floor.view`, `factory.inventory.configuration.view`, `factory.inventory.configuration.manage`, and `factory.product-definition.configuration.view`. Keep any grants independently needed for other work. For SBG, the remaining three keys are `sbg.ax-connector.capture.execute`, `sbg.ax-connector.connection.manage`, and `factory.production-execution.import`. SBG must adopt this API in its own change before shrinking its declaration.
 
-The Platform pin includes SP1's named system-principal `Scope`. Run the `production-execution` walkthrough on a fresh database to exercise an import-only principal, all four import reads, exact old conversion versions, revocation, archived/foreign company refusals, ordinary-path refusals, output lots and units, transforms, consumption, holds and rollback.
+The Platform pin includes SP1's named system-principal `Scope`. Run the `production-execution` walkthrough on a fresh database to exercise an import-only principal, all four import reads, exact old conversion versions, revocation, deleted/foreign company refusals and archived-company evidence reads, ordinary-path refusals, output lots and units, transforms, consumption, holds and rollback.
 
 ## Atomic posting
 
