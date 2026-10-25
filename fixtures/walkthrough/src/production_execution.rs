@@ -1886,6 +1886,17 @@ async fn main() -> Result<(), Error> {
         audited
             == 2 + addition_posting.entries.len() as i64 + addition_posting.genealogy.len() as i64,
     )?;
+    import_reads::run(
+        &app,
+        &admin,
+        &manager,
+        &principal,
+        (product_item, imported.id, output_identity),
+    )
+    .await?;
     println!("production execution walkthrough complete");
     Ok(())
 }
+
+// Import-only read proof; kept separate from the completion scenarios.
+mod import_reads;

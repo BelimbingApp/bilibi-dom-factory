@@ -162,6 +162,15 @@ pub(crate) async fn corrections(
     id: i64,
 ) -> Result<Vec<MaterialTransaction>, Error> {
     access::readable(client, scope, company).await?;
+    corrections_authorized(client, scope, company, id).await
+}
+
+pub(crate) async fn corrections_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company: i64,
+    id: i64,
+) -> Result<Vec<MaterialTransaction>, Error> {
     read(client, scope.tenant(), company, id).await?;
     read_selected(client, scope.tenant(), company, "WITH RECURSIVE c(id) AS (SELECT id FROM factory_inventory_transactions WHERE tenant_id=$1 AND company_id=$2 AND kind='correction' AND corrects_transaction_id=$3 UNION SELECT t.id FROM factory_inventory_transactions t JOIN c ON t.corrects_transaction_id=c.id WHERE t.tenant_id=$1 AND t.company_id=$2 AND t.kind='correction') SELECT id FROM c ORDER BY id", &[&id]).await
 }

@@ -1,8 +1,9 @@
 //! Import validation and postings through a module's private registered
 //! authority; ordinary Inventory APIs retain their own capabilities.
 use crate::{
-    genealogy, ledger, Error, Identity, Inventory, MaterialTransaction, PostingAuthority,
-    PostingRequest, ProductionImport, TransactionKind,
+    balance, conversions, genealogy, ledger, materials, units, Balance, Conversion, Error,
+    Identity, Inventory, Material, MaterialTransaction, PostingAuthority, PostingRequest,
+    ProductionImport, Trace, TransactionKind, Unit,
 };
 use bilibi_database::MutationTransaction;
 use bilibi_tenancy::Scope;
@@ -53,6 +54,94 @@ impl Inventory {
     ) -> Result<MaterialTransaction, Error> {
         import.authorize_on(client).await?;
         ledger::read(client, import.scope().tenant(), import.company(), id).await
+    }
+
+    /// Material lookup needed to prepare an import, without configuration view.
+    pub async fn get_import_material_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        item: i64,
+    ) -> Result<Material, Error> {
+        import.authorize_on(client).await?;
+        Ok(
+            materials::fetch(client, import.scope(), import.company(), item, "")
+                .await?
+                .1,
+        )
+    }
+
+    /// An exact immutable conversion version for an import line.
+    pub async fn get_import_conversion_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        item: i64,
+        unit: i64,
+        version: i32,
+    ) -> Result<Conversion, Error> {
+        import.authorize_on(client).await?;
+        conversions::get_authorized(
+            client,
+            import.scope(),
+            import.company(),
+            item,
+            unit,
+            Some(version),
+        )
+        .await
+    }
+
+    /// Backward genealogy needed to recover an import's source lots.
+    pub async fn trace_import_backward_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        identity: i64,
+    ) -> Result<Trace, Error> {
+        import.authorize_on(client).await?;
+        genealogy::trace_authorized(
+            client,
+            import.scope(),
+            import.company(),
+            identity,
+            genealogy::Direction::Backward,
+        )
+        .await
+    }
+
+    /// Correction evidence used by imported run yield, including corrections
+    /// of corrections. This grants no correction write access.
+    pub async fn list_import_corrections_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        transaction: i64,
+    ) -> Result<Vec<MaterialTransaction>, Error> {
+        import.authorize_on(client).await?;
+        ledger::corrections_authorized(client, import.scope(), import.company(), transaction).await
+    }
+
+    /// Recorded balance and conversion evidence used by imported run yield.
+    pub async fn get_import_transaction_balance_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        transaction: i64,
+    ) -> Result<Balance, Error> {
+        import.authorize_on(client).await?;
+        balance::read_authorized(client, import.scope(), import.company(), transaction).await
+    }
+
+    /// Native unit metadata used by imported run yield.
+    pub async fn get_import_unit_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &ProductionImport<'_>,
+        unit: i64,
+    ) -> Result<Unit, Error> {
+        import.authorize_on(client).await?;
+        units::fetch(client, import.scope(), import.company(), unit, "").await
     }
 
     /// Post imported completion lines atomically with their execution. Only

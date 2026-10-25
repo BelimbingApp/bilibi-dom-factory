@@ -1,7 +1,7 @@
 //! Mirrors Bilimbi ProductionExecution.Trace and ProductionExecution.Yield.
 //! Inventory owns all material reads; PostgreSQL sums facade-provided exact text.
 use crate::{orders, Execution, OrderKind, ProductionExecution, Result, Source};
-use bilibi_factory_inventory::{CrossUnitBalance, Identity, Trace, Unit};
+use bilibi_factory_inventory::{CrossUnitBalance, Identity, ProductionImport, Trace, Unit};
 use bilibi_factory_product_definition::Resource;
 use bilibi_tenancy::Scope;
 use serde_json::{json, Value};
@@ -79,7 +79,8 @@ impl ProductionExecution {
         company: i64,
         identity: i64,
     ) -> Result<ProductionTrace> {
-        self.production_trace(scope, company, identity, false).await
+        self.production_trace(scope, company, identity, false, None)
+            .await
     }
 
     pub async fn trace_forward(
@@ -88,19 +89,63 @@ impl ProductionExecution {
         company: i64,
         identity: i64,
     ) -> Result<ProductionTrace> {
-        self.production_trace(scope, company, identity, true).await
+        self.production_trace(scope, company, identity, true, None)
+            .await
     }
 
-    async fn production_trace(
+    // Import reads substitute only the authorization path. Both callers use
+    // the same trace traversal, correction chains and PostgreSQL yield sums.
+    async fn outcome_client(
+        &self,
+        scope: &Scope,
+        company: i64,
+        import: Option<&ProductionImport<'_>>,
+    ) -> Result<deadpool_postgres::Object> {
+        if let Some(import) = import {
+            let client = self.db.get().await.map_err(bilibi_database::Error::from)?;
+            import.authorize_on(&**client).await?;
+            Ok(client)
+        } else {
+            self.read_client(scope, company).await
+        }
+    }
+
+    async fn outcome_corrections(
+        &self,
+        scope: &Scope,
+        company: i64,
+        transaction: i64,
+        import: Option<&ProductionImport<'_>>,
+    ) -> Result<Vec<bilibi_factory_inventory::MaterialTransaction>> {
+        let inventory = &self.completer.inventory;
+        Ok(if let Some(import) = import {
+            let client = self.outcome_client(scope, company, Some(import)).await?;
+            inventory
+                .list_import_corrections_on(&**client, import, transaction)
+                .await?
+        } else {
+            inventory
+                .list_corrections(scope, company, transaction)
+                .await?
+        })
+    }
+
+    pub(crate) async fn production_trace(
         &self,
         scope: &Scope,
         company: i64,
         identity: i64,
         forward: bool,
+        import: Option<&ProductionImport<'_>>,
     ) -> Result<ProductionTrace> {
-        drop(self.read_client(scope, company).await?);
+        drop(self.outcome_client(scope, company, import).await?);
         let inventory = &self.completer.inventory;
-        let material = if forward {
+        let material = if let Some(import) = import {
+            let client = self.outcome_client(scope, company, Some(import)).await?;
+            inventory
+                .trace_import_backward_on(&**client, import, identity)
+                .await?
+        } else if forward {
             inventory.trace_forward(scope, company, identity).await?
         } else {
             inventory.trace_backward(scope, company, identity).await?
@@ -120,8 +165,10 @@ impl ProductionExecution {
             }
         }
         let ids: Vec<i64> = ids.into_iter().collect();
-        let executions = self.outcome_executions(scope, company, &ids).await?;
-        let client = self.read_client(scope, company).await?;
+        let executions = self
+            .outcome_executions(scope, company, &ids, import)
+            .await?;
+        let client = self.outcome_client(scope, company, import).await?;
         let mut paired = Vec::new();
         for execution in executions {
             let order = orders::get_order(&**client, scope, company, execution.order_id).await?;
@@ -134,11 +181,16 @@ impl ProductionExecution {
             if let std::collections::btree_map::Entry::Vacant(entry) =
                 resources.entry(execution.resource_id)
             {
-                entry.insert(
+                entry.insert(if let Some(import) = import {
+                    let client = self.outcome_client(scope, company, Some(import)).await?;
+                    self.product_definition
+                        .get_import_resource_on(&**client, import, execution.resource_id)
+                        .await?
+                } else {
                     self.product_definition
                         .get_resource(scope, company, execution.resource_id)
-                        .await?,
-                );
+                        .await?
+                });
             }
             runs.push(TraceRun {
                 id: execution.id,
@@ -166,8 +218,9 @@ impl ProductionExecution {
         scope: &Scope,
         company: i64,
         ids: &[i64],
+        import: Option<&ProductionImport<'_>>,
     ) -> Result<Vec<Execution>> {
-        let client = self.read_client(scope, company).await?;
+        let client = self.outcome_client(scope, company, import).await?;
         let sql = format!("SELECT {} FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=$2 AND inventory_transaction_id=ANY($3) ORDER BY completed_at,id", orders::EXECUTION_COLUMNS);
         let rows = client
             .query(&sql, &[&scope.tenant(), &company, &ids])
@@ -184,7 +237,8 @@ impl ProductionExecution {
         execution: i64,
     ) -> Result<RunYield> {
         let execution = self.get_execution(scope, company, execution).await?;
-        self.summarize_yield(scope, company, execution, None).await
+        self.summarize_yield(scope, company, execution, None, None)
+            .await
     }
 
     pub async fn get_unit_yield(
@@ -202,43 +256,65 @@ impl ProductionExecution {
         let mut ids = BTreeSet::from([identity.source_transaction_id]);
         ids.extend(draws.into_iter().map(|t| t.id));
         let ids: Vec<i64> = ids.into_iter().collect();
-        let executions = self.outcome_executions(scope, company, &ids).await?;
+        let executions = self.outcome_executions(scope, company, &ids, None).await?;
         let mut runs = Vec::new();
         for execution in executions {
             runs.push(
-                self.summarize_yield(scope, company, execution, Some(identity.id))
+                self.summarize_yield(scope, company, execution, Some(identity.id), None)
                     .await?,
             );
         }
         Ok(UnitYield { identity, runs })
     }
 
-    async fn summarize_yield(
+    pub(crate) async fn summarize_yield(
         &self,
         scope: &Scope,
         company: i64,
         execution: Execution,
         identity: Option<i64>,
+        import: Option<&ProductionImport<'_>>,
     ) -> Result<RunYield> {
         let inventory = &self.completer.inventory;
-        let transaction = inventory
-            .get_transaction(scope, company, execution.inventory_transaction_id)
+        let transaction = if let Some(import) = import {
+            let client = self.outcome_client(scope, company, Some(import)).await?;
+            inventory
+                .get_import_transaction_on(&**client, import, execution.inventory_transaction_id)
+                .await?
+        } else {
+            inventory
+                .get_transaction(scope, company, execution.inventory_transaction_id)
+                .await?
+        };
+        let corrections = self
+            .outcome_corrections(scope, company, transaction.id, import)
             .await?;
-        let corrections = inventory
-            .list_corrections(scope, company, transaction.id)
-            .await?;
-        let balance = inventory
-            .get_transaction_balance(scope, company, transaction.id)
-            .await?;
-        let client = self.read_client(scope, company).await?;
+        let balance = if let Some(import) = import {
+            let client = self.outcome_client(scope, company, Some(import)).await?;
+            inventory
+                .get_import_transaction_balance_on(&**client, import, transaction.id)
+                .await?
+        } else {
+            inventory
+                .get_transaction_balance(scope, company, transaction.id)
+                .await?
+        };
+        let client = self.outcome_client(scope, company, import).await?;
         // Only root captures: Inventory supplies the full correction chain once.
         let wastage_ids: Vec<i64> = client.query("SELECT DISTINCT inventory_transaction_id FROM factory_wastage_records WHERE tenant_id=$1 AND company_id=$2 AND execution_id=$3 AND corrects_id IS NULL AND inventory_transaction_id IS NOT NULL ORDER BY inventory_transaction_id", &[&scope.tenant(), &company, &execution.id]).await?.iter().map(|r| r.get(0)).collect();
         drop(client);
         let mut wastage = Vec::new();
         let mut seen = BTreeSet::new();
         for id in wastage_ids {
-            let root = inventory.get_transaction(scope, company, id).await?;
-            let changes = inventory.list_corrections(scope, company, id).await?;
+            let root = if let Some(import) = import {
+                let client = self.outcome_client(scope, company, Some(import)).await?;
+                inventory
+                    .get_import_transaction_on(&**client, import, id)
+                    .await?
+            } else {
+                inventory.get_transaction(scope, company, id).await?
+            };
+            let changes = self.outcome_corrections(scope, company, id, import).await?;
             for posting in std::iter::once(root).chain(changes) {
                 if seen.insert(posting.id) {
                     wastage.push(posting);
@@ -271,10 +347,16 @@ impl ProductionExecution {
             .collect();
         let mut units = BTreeMap::new();
         for id in unit_ids {
-            units.insert(id, inventory.get_unit(scope, company, id).await?);
+            let unit = if let Some(import) = import {
+                let client = self.outcome_client(scope, company, Some(import)).await?;
+                inventory.get_import_unit_on(&**client, import, id).await?
+            } else {
+                inventory.get_unit(scope, company, id).await?
+            };
+            units.insert(id, unit);
         }
         let payload = Value::Array(payload);
-        let client = self.read_client(scope, company).await?;
+        let client = self.outcome_client(scope, company, import).await?;
         let rows = client.query(YIELD_SQL, &[&payload, &identity]).await?;
         let mut balances = Vec::new();
         for row in rows {

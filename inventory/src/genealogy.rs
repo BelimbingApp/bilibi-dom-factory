@@ -165,7 +165,18 @@ pub(crate) async fn trace(
     id: i64,
     direction: Direction,
 ) -> Result<Trace, Error> {
-    let root = get(client, scope, company, id).await?;
+    access::readable(client, scope, company).await?;
+    trace_authorized(client, scope, company, id, direction).await
+}
+
+pub(crate) async fn trace_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company: i64,
+    id: i64,
+    direction: Direction,
+) -> Result<Trace, Error> {
+    let root = get_authorized(client, scope, company, id).await?;
     let tenant = scope.tenant();
     let (from, to) = match direction {
         Direction::Backward => ("o", "i"),

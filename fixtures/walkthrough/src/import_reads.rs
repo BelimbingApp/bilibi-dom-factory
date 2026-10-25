@@ -1,0 +1,305 @@
+//! Import-only read proof, called after the production execution walkthrough.
+use super::{decimal, refusal, verify, Error};
+use bilibi_authz::grants::Grants;
+use bilibi_factory_inventory::{Inventory, NewUnit};
+use bilibi_factory_production_execution::ProductionExecution;
+use bilibi_tenancy::Scope;
+
+pub(super) async fn run(
+    app: &bilibi_web::App,
+    admin: &Scope,
+    manager: &Scope,
+    principal: &Scope,
+    evidence: (i64, i64, i64),
+) -> Result<(), Error> {
+    println!("== import-only material, conversion, yield and backward trace reads");
+    let (material, execution, identity) = evidence;
+    let inventory = app
+        .services
+        .get::<Inventory>(bilibi_factory_inventory::SERVICE)?;
+    let pe = app
+        .services
+        .get::<ProductionExecution>(bilibi_factory_production_execution::SERVICE)?;
+    let grants = app.services.get::<Grants>("base/authz.grants")?;
+    grants
+        .set_system(
+            admin,
+            "factory-import-fixture",
+            "factory.production-execution.import",
+            Some(true),
+        )
+        .await?;
+    let importer = pe.importer(principal, 1)?;
+    let unit = inventory
+        .create_unit(
+            manager,
+            1,
+            &NewUnit {
+                code: "IMPORT-READ".into(),
+                name: "Import read unit".into(),
+            },
+        )
+        .await?;
+    let first = inventory
+        .define_conversion(manager, 1, material, unit.id, decimal("1.234567890123"))
+        .await?;
+    let second = inventory
+        .define_conversion(manager, 1, material, unit.id, decimal("2.345678901234"))
+        .await?;
+    verify(
+        "import material matches ordinary material",
+        importer.get_material(material).await?
+            == inventory.get_material(manager, 1, material).await?,
+    )?;
+    verify(
+        "import conversion preserves exact old version after a new version",
+        importer
+            .get_conversion(material, unit.id, first.version)
+            .await?
+            == first
+            && importer
+                .get_conversion(material, unit.id, second.version)
+                .await?
+                == second,
+    )?;
+    refusal(
+        "missing conversion version never falls back to current",
+        importer
+            .get_conversion(material, unit.id, second.version + 1)
+            .await,
+        "Conversion not found",
+    )?;
+    verify(
+        "import yield matches ordinary native totals and conversion evidence",
+        format!("{:?}", importer.get_run_yield(execution).await?)
+            == format!("{:?}", pe.get_run_yield(manager, 1, execution).await?),
+    )?;
+    // Exercise the import-only yield reads of wastage and its correction chain.
+    for capability in [
+        "factory.production-execution.wastage.record",
+        "factory.production-execution.wastage.correct",
+    ] {
+        grants
+            .set_direct(admin, manager.user(), capability, Some(true))
+            .await?;
+    }
+    let reason = pe
+        .create_wastage_reason(
+            manager,
+            1,
+            &serde_json::json!({"code":"IMPORT-READ", "label":"Import read proof"}),
+        )
+        .await?;
+    let posting = importer
+        .get_transaction(
+            importer
+                .get_execution(execution)
+                .await?
+                .inventory_transaction_id,
+        )
+        .await?;
+    let output = posting
+        .entries
+        .iter()
+        .find(|entry| entry.identity_id == Some(identity) && entry.role == "stock")
+        .ok_or("missing import output")?;
+    let waste = pe.record_wastage(manager, 1, execution, &serde_json::json!({"request_id":"import-read-wastage", "reason_id":reason["id"], "item_id":material, "location_id":output.location_id, "identity_id":identity, "quantity":"0.25", "observation":"measured"})).await?;
+    pe.correct_wastage(manager, 1, waste["id"].as_i64().ok_or("missing wastage id")?, &serde_json::json!({"request_id":"import-read-wastage-correction", "quantity":"0.125", "correction_reason":"Import read proof"})).await?;
+    let corrected = importer.get_run_yield(execution).await?;
+    verify(
+        "import yield includes exact wastage and its correction postings",
+        corrected.wastage_transaction_ids.len() == 2
+            && corrected.balances.iter().any(|balance| {
+                balance.wastage.parse::<bilibi_factory_inventory::Decimal>() == Ok(decimal("0.125"))
+            }),
+    )?;
+    verify(
+        "corrected import yield matches ordinary yield",
+        format!("{corrected:?}") == format!("{:?}", pe.get_run_yield(manager, 1, execution).await?),
+    )?;
+    for capability in [
+        "factory.production-execution.wastage.record",
+        "factory.production-execution.wastage.correct",
+    ] {
+        grants
+            .set_direct(admin, manager.user(), capability, None)
+            .await?;
+    }
+    let trace = importer.trace_backward(identity).await?;
+    verify(
+        "import trace includes source lots and enriched production runs",
+        trace.material.identities.len() > 1
+            && !trace.material.links.is_empty()
+            && trace.runs.iter().any(|run| run.id == execution),
+    )?;
+    verify(
+        "import backward trace matches ordinary genealogy and resources",
+        format!("{trace:?}") == format!("{:?}", pe.trace_backward(manager, 1, identity).await?),
+    )?;
+
+    refusal(
+        "ordinary material read retains configuration view",
+        inventory.get_material(principal, 1, material).await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary exact conversion retains configuration view",
+        inventory
+            .get_conversion(principal, 1, material, unit.id, Some(first.version))
+            .await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary run yield retains floor view",
+        pe.get_run_yield(principal, 1, execution).await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary backward trace retains floor view",
+        pe.trace_backward(principal, 1, identity).await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary Inventory trace retains configuration view",
+        inventory.trace_backward(principal, 1, identity).await,
+        "Access denied",
+    )?;
+
+    let db = app
+        .services
+        .get::<bilibi_database::Db>("base/database.pool")?;
+    let client = db.get().await?;
+    let foreign: i64 = client
+        .query_one("SELECT id FROM companies WHERE tenant_id<>1 LIMIT 1", &[])
+        .await?
+        .get(0);
+    let foreign_importer = pe.importer(principal, foreign)?;
+    refusal(
+        "material import read refuses a foreign company",
+        foreign_importer.get_material(material).await,
+        "Not found",
+    )?;
+    refusal(
+        "conversion import read refuses a foreign company",
+        foreign_importer
+            .get_conversion(material, unit.id, first.version)
+            .await,
+        "Not found",
+    )?;
+    refusal(
+        "yield import read refuses a foreign company",
+        foreign_importer.get_run_yield(execution).await,
+        "Not found",
+    )?;
+    refusal(
+        "trace import read refuses a foreign company",
+        foreign_importer.trace_backward(identity).await,
+        "Not found",
+    )?;
+    refusal(
+        "missing material stays missing",
+        importer.get_material(i64::MAX).await,
+        "Item not found",
+    )?;
+    refusal(
+        "missing run stays missing",
+        importer.get_run_yield(i64::MAX).await,
+        "Execution not found",
+    )?;
+    refusal(
+        "missing lot stays missing",
+        importer.trace_backward(i64::MAX).await,
+        "Identity not found",
+    )?;
+
+    client
+        .execute(
+            "UPDATE companies SET status='archived' WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    verify(
+        "archived company preserves import material evidence",
+        importer.get_material(material).await?.item_id == material,
+    )?;
+    verify(
+        "archived company preserves exact import conversion evidence",
+        importer
+            .get_conversion(material, unit.id, first.version)
+            .await?
+            == first,
+    )?;
+    verify(
+        "archived company preserves import run yield",
+        importer.get_run_yield(execution).await?.execution_id == execution,
+    )?;
+    verify(
+        "archived company preserves import backward trace",
+        importer.trace_backward(identity).await?.material.root.id == identity,
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET deleted_at=now() WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    refusal(
+        "material import read rechecks live company",
+        importer.get_material(material).await,
+        "Not found",
+    )?;
+    refusal(
+        "conversion import read rechecks live company",
+        importer
+            .get_conversion(material, unit.id, first.version)
+            .await,
+        "Not found",
+    )?;
+    refusal(
+        "yield import read rechecks live company",
+        importer.get_run_yield(execution).await,
+        "Not found",
+    )?;
+    refusal(
+        "trace import read rechecks live company",
+        importer.trace_backward(identity).await,
+        "Not found",
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET status='active', deleted_at=NULL WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    grants
+        .set_system(
+            admin,
+            "factory-import-fixture",
+            "factory.production-execution.import",
+            Some(false),
+        )
+        .await?;
+    refusal(
+        "retained importer material read rechecks revoked grant",
+        importer.get_material(material).await,
+        "Access denied",
+    )?;
+    refusal(
+        "retained importer conversion rechecks revoked grant",
+        importer
+            .get_conversion(material, unit.id, first.version)
+            .await,
+        "Access denied",
+    )?;
+    refusal(
+        "retained importer yield rechecks revoked grant",
+        importer.get_run_yield(execution).await,
+        "Access denied",
+    )?;
+    refusal(
+        "retained importer trace rechecks revoked grant",
+        importer.trace_backward(identity).await,
+        "Access denied",
+    )?;
+    Ok(())
+}
