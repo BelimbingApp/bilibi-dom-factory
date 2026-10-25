@@ -14,7 +14,9 @@
 //! `commerce.inventory.item.create`/`.update`), the company as an authorized
 //! target, and a company that is not archived, and runs in one audited
 //! `MutationBoundary` transaction. A record of another company is reported as
-//! not found.
+//! not found. Explicit production imports use their registered authority's
+//! import grant for completion postings and immutable evidence reads instead
+//! of configuration grants; see [`ProductionImport`].
 use bilibi_database::{Db, MutationBoundary, MutationTransaction};
 use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_settings::Settings;

@@ -1414,6 +1414,82 @@ async fn main() -> Result<(), Error> {
             .await,
         "Not found",
     )?;
+    client.batch_execute("ALTER TABLE factory_operation_executions ADD CONSTRAINT fixture_refuse_import CHECK(request_id <> 'import-only-late-failure')").await?;
+    let before_late = (
+        count("factory_operation_executions").await?,
+        count("factory_inventory_transactions").await?,
+        count("factory_inventory_identities").await?,
+    );
+    refusal(
+        "execution failure rolls back an imported output and its unit",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-late-failure".into(),
+                    outputs: vec![StockLine {
+                        identity: Some(NewIdentity {
+                            kind: IdentityKind::Unit,
+                            code: "IMPORT-LATE-ROLLBACK".into(),
+                            dimensions: BTreeMap::new(),
+                        }),
+                        ..line(product_item, floor, "1")
+                    }],
+                    ..unit_run.clone()
+                },
+            )
+            .await,
+        "Database unavailable",
+    )?;
+    client
+        .batch_execute(
+            "ALTER TABLE factory_operation_executions DROP CONSTRAINT fixture_refuse_import",
+        )
+        .await?;
+    verify(
+        "late import failure leaves no execution transaction or identity",
+        before_late
+            == (
+                count("factory_operation_executions").await?,
+                count("factory_inventory_transactions").await?,
+                count("factory_inventory_identities").await?,
+            ),
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET status='archived' WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    refusal(
+        "import cannot create in an archived company",
+        importer
+            .create_order(&NewOrder {
+                code: "ARCHIVED-IMPORT".into(),
+                ..new_order.clone()
+            })
+            .await,
+        "archived",
+    )?;
+    refusal(
+        "import cannot complete in an archived company",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-archived".into(),
+                    ..unit_run.clone()
+                },
+            )
+            .await,
+        "archived",
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET status='active' WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
     grants
         .set_system(
             &admin,

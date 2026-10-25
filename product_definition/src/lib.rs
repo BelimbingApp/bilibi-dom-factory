@@ -419,7 +419,7 @@ impl ProductDefinition {
         .await
     }
 
-    /// The routed operator resource needed to validate an import.
+    /// The routed resource needed to validate an import.
     pub async fn get_import_resource_on(
         &self,
         client: &impl tokio_postgres::GenericClient,
