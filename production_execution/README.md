@@ -58,15 +58,19 @@ let execution = importer.complete_operation(order.id, &completion).await?;
 let transaction = importer.get_transaction(execution.inventory_transaction_id).await?;
 ```
 
+`Importer` also exposes `get_material(item_id)` for line preparation, `get_conversion(item_id, unit_id, version)` for an exact immutable conversion, `get_run_yield(execution_id)` for native-unit totals, and `trace_backward(identity_id)` for source lots and enriched production runs. Conversion version is required: a missing version refuses instead of choosing the latest. Yield and trace use the same calculations and evidence as the ordinary reads.
+
 `Importer` also exposes `list_orders(limit)` for header recovery, `get_execution(id)` for retries, and `get_identity(id)` for output identity evidence. Each call rechecks the import grant and company; keeping an `Importer` after grant revocation grants nothing. Headers remain separate audited commits, as in `create_order`. Validation, exact revisions, ledger arithmetic, identity creation, company locks and completion atomicity are unchanged. Imports cannot use this facade to edit configuration or post ordinary receipts, transfers or corrections.
 
 ### Upgrade notes for agents
 
 Extension owners adopting import-only authorization should replace Factory `create_order` and header-recovery `list_orders` calls with the corresponding `Importer` methods. Replace result reads through Production Execution `get_execution` and Inventory `get_transaction` / `get_identity` with `Importer` methods too. Completion may use `Importer::complete_operation` or the existing `complete_operation(..., Source::Import, ...)`.
 
-After updating and proving the complete import and retry flow, remove the five additional Factory grants from the principal declaration and its installed grants: `factory.production-execution.configuration.manage`, `factory.production-execution.floor.view`, `factory.inventory.configuration.view`, `factory.inventory.configuration.manage`, and `factory.product-definition.configuration.view`. Keep any grants independently needed for other work. For SBG, the remaining three keys are `sbg.ax-connector.capture.execute`, `sbg.ax-connector.connection.manage`, and `factory.production-execution.import`. SBG must adopt this API in its own change before shrinking its declaration.
+Replace the remaining import reads with `Importer::get_material(item_id)`, `Importer::get_conversion(item_id, unit_id, version)`, `Importer::get_run_yield(execution_id)` and `Importer::trace_backward(identity_id)`. Create the importer with `production_execution.importer(scope, company_id)?`; its methods take no extra scope or company. Pass the exact conversion version from the source record. These calls need only `factory.production-execution.import`, including the trace's resource enrichment. Ordinary Inventory and Production Execution reads retain their view gates.
 
-The Platform pin includes SP1's named system-principal `Scope`. Run the `production-execution` walkthrough on a fresh database to exercise an import-only principal, revocation, ordinary-path refusals, output lots and units, transforms, consumption, holds and rollback.
+After updating and proving the complete import, read and retry flow, remove the five additional Factory grants from the principal declaration and its installed grants: `factory.production-execution.configuration.manage`, `factory.production-execution.floor.view`, `factory.inventory.configuration.view`, `factory.inventory.configuration.manage`, and `factory.product-definition.configuration.view`. Keep any grants independently needed for other work. For SBG, the remaining three keys are `sbg.ax-connector.capture.execute`, `sbg.ax-connector.connection.manage`, and `factory.production-execution.import`. SBG must adopt this API in its own change before shrinking its declaration.
+
+The Platform pin includes SP1's named system-principal `Scope`. Run the `production-execution` walkthrough on a fresh database to exercise an import-only principal, all four import reads, exact old conversion versions, revocation, archived/foreign company refusals, ordinary-path refusals, output lots and units, transforms, consumption, holds and rollback.
 
 ## Atomic posting
 

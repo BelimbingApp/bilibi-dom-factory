@@ -78,6 +78,17 @@ pub(crate) async fn get(
     version: Option<i32>,
 ) -> Result<Conversion, Error> {
     readable(client, scope, company_id).await?;
+    get_authorized(client, scope, company_id, item_id, unit_id, version).await
+}
+
+pub(crate) async fn get_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company_id: i64,
+    item_id: i64,
+    unit_id: i64,
+    version: Option<i32>,
+) -> Result<Conversion, Error> {
     let (material_id, material) = materials::fetch(client, scope, company_id, item_id, "").await?;
     let sql = format!(
         "SELECT {COLUMNS} FROM {FROM} WHERE c.company_id=$1 AND c.material_id=$2 AND c.unit_id=$3 AND ($4::integer IS NULL OR c.version=$4) ORDER BY c.version DESC LIMIT 1"

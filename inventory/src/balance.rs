@@ -80,6 +80,15 @@ pub(crate) async fn read(
     id: i64,
 ) -> Result<Balance, Error> {
     access::readable(client, scope, company).await?;
+    read_authorized(client, scope, company, id).await
+}
+
+pub(crate) async fn read_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company: i64,
+    id: i64,
+) -> Result<Balance, Error> {
     let tenant = scope.tenant();
     ledger::read(client, tenant, company, id).await?;
     let unit = |row: &tokio_postgres::Row| Unit {

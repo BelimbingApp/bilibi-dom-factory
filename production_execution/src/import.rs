@@ -1,12 +1,15 @@
 //! Explicit import facade. Bilimbi's import needs no configuration grants;
 //! keep that reach here while normal facade and agent paths retain theirs.
 use crate::{
-    orders, Completion, Execution, NewOrder, Order, ProductionExecution, Result, Source, AUTHORITY,
+    orders, Completion, Execution, NewOrder, Order, ProductionExecution, ProductionTrace, Result,
+    RunYield, Source, AUTHORITY,
 };
-use bilibi_factory_inventory::{Identity, MaterialTransaction, ProductionImport};
+use bilibi_factory_inventory::{
+    Conversion, Identity, Material, MaterialTransaction, ProductionImport,
+};
 use bilibi_tenancy::Scope;
 
-/// An import's orders and immutable result evidence. Every call rechecks the
+/// An import's preparation reads, orders and result evidence. Every call rechecks the
 /// import grant against this scope and company; no general configuration or
 /// live production operation is available through this facade.
 pub struct Importer<'a> {
@@ -27,6 +30,64 @@ impl ProductionExecution {
     }
 }
 impl Importer<'_> {
+    /// Look up a material by its item ID when preparing an import line.
+    pub async fn get_material(&self, item: i64) -> Result<Material> {
+        let client = self
+            .owner
+            .db
+            .get()
+            .await
+            .map_err(bilibi_database::Error::from)?;
+        Ok(self
+            .owner
+            .completer
+            .inventory
+            .get_import_material_on(&**client, &self.access, item)
+            .await?)
+    }
+
+    /// Read the exact conversion version recorded by the import; never select
+    /// a newer version implicitly.
+    pub async fn get_conversion(&self, item: i64, unit: i64, version: i32) -> Result<Conversion> {
+        let client = self
+            .owner
+            .db
+            .get()
+            .await
+            .map_err(bilibi_database::Error::from)?;
+        Ok(self
+            .owner
+            .completer
+            .inventory
+            .get_import_conversion_on(&**client, &self.access, item, unit, version)
+            .await?)
+    }
+
+    pub async fn get_run_yield(&self, execution: i64) -> Result<RunYield> {
+        let execution = self.get_execution(execution).await?;
+        self.owner
+            .summarize_yield(
+                self.access.scope(),
+                self.access.company(),
+                execution,
+                None,
+                Some(&self.access),
+            )
+            .await
+    }
+
+    pub async fn trace_backward(&self, identity: i64) -> Result<ProductionTrace> {
+        self.owner
+            .production_trace(
+                self.access.scope(),
+                self.access.company(),
+                identity,
+                false,
+                Some(&self.access),
+            )
+            .await
+    }
+
     pub async fn create_order(&self, new: &NewOrder) -> Result<Order> {
         let mut client = self
             .owner
