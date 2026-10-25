@@ -369,11 +369,19 @@ impl Completer {
         let identity_id = line.identity_id.filter(|id| *id > 0).ok_or(invalid)?;
         // A missing identity or source is a hold-source refusal; a denied
         // capability or database fault is reported as it is.
-        let identity = match self
-            .inventory
-            .get_identity_on(client, scope, company, identity_id)
-            .await
-        {
+        let identity_result = if request.source == Source::Import {
+            let import = self
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.inventory
+                .get_import_identity_on(client, &import, identity_id)
+                .await
+        } else {
+            self.inventory
+                .get_identity_on(client, scope, company, identity_id)
+                .await
+        };
+        let identity = match identity_result {
             Ok(identity) => identity,
             Err(bilibi_factory_inventory::Error::Access(error)) => return Err(error.into()),
             Err(_) => return Err(Error::InvalidHoldSource),
@@ -381,11 +389,19 @@ impl Completer {
         if identity.item_id != line.item_id {
             return Err(Error::InvalidHoldSource);
         }
-        let source = match self
-            .inventory
-            .get_transaction_on(client, scope, company, identity.source_transaction_id)
-            .await
-        {
+        let source_result = if request.source == Source::Import {
+            let import = self
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.inventory
+                .get_import_transaction_on(client, &import, identity.source_transaction_id)
+                .await
+        } else {
+            self.inventory
+                .get_transaction_on(client, scope, company, identity.source_transaction_id)
+                .await
+        };
+        let source = match source_result {
             Ok(source) => source,
             Err(bilibi_factory_inventory::Error::Access(error)) => return Err(error.into()),
             Err(_) => return Err(Error::InvalidHoldSource),
@@ -449,6 +465,13 @@ impl Completer {
             ..PostingRequest::default()
         };
         let inventory = &self.inventory;
+        if request.source == Source::Import {
+            posting.variance.clone_from(&request.variance);
+            let import = inventory.production_import(scope, company, &AUTHORITY)?;
+            return Ok(inventory
+                .record_import_on(tx, &import, &request.inputs, &request.outputs, &posting)
+                .await?);
+        }
         Ok(
             match (request.inputs.is_empty(), request.outputs.is_empty()) {
                 (false, false) => {
@@ -544,25 +567,50 @@ impl Completer {
     ) -> Result<(Order, Request)> {
         self.authorize_import(client, scope, company, source)
             .await?;
-        bilibi_authz::authorize_key(client, scope, crate::contributions::FLOOR_VIEW).await?;
+        if source == Source::Live {
+            bilibi_authz::authorize_key(client, scope, crate::contributions::FLOOR_VIEW).await?;
+        }
         bilibi_company::organisation::require_live(client, scope, company).await?;
         let order = orders::get_order(client, scope, company, order_id).await?;
-        let selected = self
-            .product_definition
-            .select_revisions_on(
-                client,
-                scope,
-                company,
-                order.product_id,
-                order.formula_version,
-                order.routing_version,
-            )
-            .await?;
+        let selected = if source == Source::Import {
+            let import = self
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.product_definition
+                .select_import_revisions_on(
+                    client,
+                    &import,
+                    order.product_id,
+                    order.formula_version,
+                    order.routing_version,
+                )
+                .await?
+        } else {
+            self.product_definition
+                .select_revisions_on(
+                    client,
+                    scope,
+                    company,
+                    order.product_id,
+                    order.formula_version,
+                    order.routing_version,
+                )
+                .await?
+        };
         let (request, resource) = validate(scope, &selected, source, completion)?;
         if let Some(resource) = resource {
-            self.product_definition
-                .get_resource_on(client, scope, company, resource)
-                .await?;
+            if source == Source::Import {
+                let import = self
+                    .inventory
+                    .production_import(scope, company, &AUTHORITY)?;
+                self.product_definition
+                    .get_import_resource_on(client, &import, resource)
+                    .await?;
+            } else {
+                self.product_definition
+                    .get_resource_on(client, scope, company, resource)
+                    .await?;
+            }
         }
         Ok((order, request))
     }
@@ -579,7 +627,12 @@ impl Completer {
         source: Source,
         completion: &Completion,
     ) -> Result<(crate::Execution, bool)> {
-        bilibi_company::organisation::authorize_target(tx.sql(), scope, company, MANAGE).await?;
+        if source == Source::Live {
+            bilibi_company::organisation::authorize_target(tx.sql(), scope, company, MANAGE)
+                .await?;
+        }
+        self.authorize_import(tx.sql(), scope, company, source)
+            .await?;
         bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
         let (order, request) = self
             .prepare(tx.sql(), scope, company, order_id, source, completion)
@@ -601,7 +654,9 @@ impl Completer {
         overrides: &[Applied],
     ) -> Result<(crate::Execution, bool)> {
         use bilibi_company::organisation::{authorize_target, require_writable};
-        authorize_target(tx.sql(), scope, company, MANAGE).await?;
+        if request.source == Source::Live {
+            authorize_target(tx.sql(), scope, company, MANAGE).await?;
+        }
         if request.source == Source::Import {
             match authorize_target(tx.sql(), scope, company, crate::contributions::IMPORT).await {
                 Err(bilibi_database::Error::Forbidden) => return Err(Error::ImportNotAuthorized),

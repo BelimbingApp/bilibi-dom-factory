@@ -63,6 +63,15 @@ pub(crate) async fn get(
     id: i64,
 ) -> Result<Identity, Error> {
     access::readable(client, scope, company).await?;
+    get_authorized(client, scope, company, id).await
+}
+
+pub(crate) async fn get_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company: i64,
+    id: i64,
+) -> Result<Identity, Error> {
     fetch(client, scope.tenant(), company, &[id])
         .await?
         .pop()

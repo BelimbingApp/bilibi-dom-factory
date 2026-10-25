@@ -387,6 +387,58 @@ impl ProductDefinition {
     ) -> Result<SelectedRevisions> {
         bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
         bilibi_company::organisation::require_live(client, scope, company).await?;
+        self.select_revisions_authorized(
+            client,
+            scope,
+            company,
+            product,
+            formula_version,
+            routing_version,
+        )
+        .await
+    }
+
+    /// Exact definition revisions needed by an authorized production import.
+    pub async fn select_import_revisions_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &bilibi_factory_inventory::ProductionImport<'_>,
+        product: i64,
+        formula_version: i32,
+        routing_version: i32,
+    ) -> Result<SelectedRevisions> {
+        import.authorize_on(client).await?;
+        self.select_revisions_authorized(
+            client,
+            import.scope(),
+            import.company(),
+            product,
+            formula_version,
+            routing_version,
+        )
+        .await
+    }
+
+    /// The routed operator resource needed to validate an import.
+    pub async fn get_import_resource_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        import: &bilibi_factory_inventory::ProductionImport<'_>,
+        id: i64,
+    ) -> Result<Resource> {
+        import.authorize_on(client).await?;
+        store::fetch(client, import.scope(), import.company(), Kind::Resource, id).await
+    }
+
+    async fn select_revisions_authorized(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company: i64,
+        product: i64,
+        formula_version: i32,
+        routing_version: i32,
+    ) -> Result<SelectedRevisions> {
         let product: Product = store::fetch(client, scope, company, Kind::Product, product).await?;
         let formula = store::revision(
             client,

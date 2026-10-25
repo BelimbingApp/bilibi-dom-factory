@@ -297,8 +297,14 @@ pub(crate) async fn post(
     kind: TransactionKind,
     request: &PostingRequest,
     authority: Option<&'static PostingAuthority>,
+    import: Option<&crate::ProductionImport<'_>>,
 ) -> Result<MaterialTransaction, Error> {
-    access::writable(tx.sql(), scope, company).await?;
+    if let Some(import) = import {
+        import.authorize_on(tx.sql()).await?;
+        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
+    } else {
+        access::writable(tx.sql(), scope, company).await?;
+    }
     let request = ledger_request::validate(kind, request)?;
     let tenant = scope.tenant();
     let actor = scope.actor().user();
