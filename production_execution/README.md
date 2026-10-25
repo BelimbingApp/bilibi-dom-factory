@@ -211,3 +211,21 @@ DATABASE_URL=postgres://bilibi:bilibi@127.0.0.1:5438/<disposable-db> \
 ```
 
 To exercise HTTP/MCP too, start `bilibi-web run` against that same database and set `BILIBI_FACTORY_API` to its local address when running the proof. The executable installs only disposable fixture accounts, creates actual units/materials/definitions/stock, reviews and commits production operations, and checks generated-identity/conversion evidence, import/override denial logs and revocation, replay/conflict, tenant isolation, malformed inputs, single-use plans, and whole-plan rollback after a later overdraw. The optional edge checks obtain a real device-grant token, create/complete through HTTP and consume through MCP with an authenticated agent recorder; tokens and plan codes are never printed. It adds no production routes, accounts or data.
+
+
+## Upgrade notes for agents
+
+Import corrections can now add stock to an existing output lot or unit through `complete_operation(..., Source::Import, ...)`. Both transform completions (inputs and outputs) and output-only completions accept an output `StockLine` with `identity_id: Some(existing_id)` and `identity: None`. New identities still use `identity: Some(NewIdentity { ... })` without `identity_id`. The selected operation must allow the item's output, and the identity must belong to that item and company. All lines of an identified transform must identify their stock.
+
+For example, if a lot already holds 10 and a correction adds 2, submit an output quantity of `2` citing that lot's ID. The lot then holds 12. This is an **addition**, not an absolute replacement quantity. The original execution and the identity's original source, dimensions and code remain unchanged. Each addition has its own execution, posting, evidence and audit records; transform genealogy includes its inputs. Import and sibling write permissions, stock availability and the atomic execution/posting boundary still apply.
+
+Extension owners can replace an existing-lot refusal such as SBG's `output_lot_exists` with this flow in their own repository:
+
+1. Upgrade the mounted Factory checkout to a release containing this change. No migration or Platform pin change is required.
+2. Resolve the previously posted output identity through your recorded Factory posting or the Inventory facade. Send its `identity_id` instead of requesting another identity with the same code.
+3. Submit only the additional production facts, including their actual inputs and any required variance evidence. Use a new company-unique completion `request_id` for each approved correction and preserve that exact request for retries.
+4. Reconcile the returned posting and stock through Inventory and keep the correction's execution link. Replaying the same request returns that execution without posting twice; changing the facts under that ID refuses.
+
+Do not resubmit an absolute replacement's full quantities as an addition. Reductions and reversals remain Factory-owner work through Inventory's existing signed `record_production_correction`/`record_production_correction_on` seam, with a private registered posting authority, the original transaction ID and a reason. An Extension cannot obtain that authority; registrations outside Factory are refused. `complete_operation` continues to require positive line quantities; this change does not introduce a replacement-completion API. SBG is unchanged here and must retain its refusal until its own correction workflow implements the appropriate adjustments.
+
+The `production-execution` walkthrough now exercises additions through both completion shapes, concurrent retries, trace links, immutable identities, duplicate-code and mismatched-identity refusals, stock limits, import authorization, audit capture and rollback when the execution insert fails after posting.

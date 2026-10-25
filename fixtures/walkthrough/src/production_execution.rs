@@ -1555,6 +1555,224 @@ async fn main() -> Result<(), Error> {
         pe.get_execution(&other, 1, first.id).await,
         "Not found",
     )?;
+    // Existing-output imports: keep this proof independent of earlier totals.
+    println!("== import correction into an existing output lot");
+    let create_output = Completion {
+        request_id: "existing-output-create".into(),
+        operation_code: "make".into(),
+        inputs: vec![],
+        outputs: vec![StockLine {
+            identity: lot("P-import-correction"),
+            ..line(product_item, floor, "1")
+        }],
+        ..blend("existing-output-create", aged)
+    };
+    let original = pe
+        .complete_operation(&admin, 1, order.id, Source::Import, &create_output)
+        .await?;
+    let original_posting = inventory
+        .get_transaction(&manager, 1, original.inventory_transaction_id)
+        .await?;
+    let output_lot = identity(&original_posting, 0);
+    let original_identity = inventory.get_identity(&manager, 1, output_lot).await?;
+    let identities_before = count("factory_inventory_identities").await?;
+    let addition = Completion {
+        request_id: "existing-output-transform".into(),
+        inputs: vec![StockLine {
+            identity_id: Some(free_lot),
+            ..line(free, store, "2")
+        }],
+        outputs: vec![StockLine {
+            identity_id: Some(output_lot),
+            output_role: Some("product".into()),
+            ..line(product_item, floor, "2")
+        }],
+        ..blend("existing-output-transform", aged)
+    };
+    let (left, right) = tokio::join!(
+        pe.complete_operation(&admin, 1, order.id, Source::Import, &addition),
+        pe.complete_operation(&admin, 1, order.id, Source::Import, &addition),
+    );
+    let (added, retried) = (left?, right?);
+    let addition_posting = inventory
+        .get_transaction(&manager, 1, added.inventory_transaction_id)
+        .await?;
+    let positions = inventory
+        .get_identity_positions(&manager, 1, output_lot)
+        .await?;
+    verify(
+        "concurrent import corrections add to the existing lot exactly once",
+        added.id == retried.id
+            && positions.len() == 1
+            && positions[0].quantity == "3.000000000000"
+            && count("factory_inventory_identities").await? == identities_before
+            && inventory.get_identity(&manager, 1, output_lot).await? == original_identity
+            && addition_posting.kind == "transform"
+            && identity(&addition_posting, 1) == output_lot
+            && addition_posting.genealogy.len() == 1,
+    )?;
+    let trace = inventory.trace_backward(&manager, 1, output_lot).await?;
+    verify(
+        "the existing lot traces the additional transform input",
+        trace.links.iter().any(|link| {
+            link.input_identity_id == free_lot
+                && link.output_identity_id == output_lot
+                && link.transaction_id == addition_posting.id
+        }),
+    )?;
+    let output_only = Completion {
+        request_id: "existing-output-only".into(),
+        inputs: vec![],
+        operation_code: "make".into(),
+        outputs: vec![StockLine {
+            identity_id: Some(output_lot),
+            ..line(product_item, floor, "3")
+        }],
+        ..addition.clone()
+    };
+    let output_run = pe
+        .complete_operation(&admin, 1, order.id, Source::Import, &output_only)
+        .await?;
+    verify(
+        "an output-only import also adds to the existing lot",
+        inventory
+            .get_identity_positions(&manager, 1, output_lot)
+            .await?[0]
+            .quantity
+            == "6.000000000000"
+            && inventory
+                .get_transaction(&manager, 1, output_run.inventory_transaction_id)
+                .await?
+                .kind
+                == "output",
+    )?;
+    let before_refusals = (
+        count("factory_operation_executions").await?,
+        count("factory_inventory_transactions").await?,
+        count("base_audit_mutations").await?,
+    );
+    for (label, request, expected) in [
+        (
+            "a reused request with different output facts",
+            Completion {
+                evidence: "changed correction".into(),
+                ..addition.clone()
+            },
+            "Request id conflict",
+        ),
+        (
+            "an output citing another material's identity",
+            Completion {
+                request_id: "existing-output-wrong-material".into(),
+                outputs: vec![StockLine {
+                    identity_id: Some(free_lot),
+                    ..line(product_item, floor, "2")
+                }],
+                ..addition.clone()
+            },
+            "Identity not found",
+        ),
+        (
+            "an output specifying both identity creation and reuse",
+            Completion {
+                request_id: "existing-output-both".into(),
+                outputs: vec![StockLine {
+                    identity: lot("P-invalid"),
+                    ..addition.outputs[0].clone()
+                }],
+                ..addition.clone()
+            },
+            "Invalid identity",
+        ),
+        (
+            "creating a new identity with the existing lot code",
+            Completion {
+                request_id: "existing-output-duplicate".into(),
+                outputs: create_output.outputs.clone(),
+                ..create_output.clone()
+            },
+            "Code has already been taken",
+        ),
+        (
+            "an existing output lot cannot fund an excessive input draw",
+            Completion {
+                request_id: "existing-output-overdraw".into(),
+                inputs: vec![StockLine {
+                    identity_id: Some(free_lot),
+                    ..line(free, store, "1000")
+                }],
+                outputs: vec![StockLine {
+                    identity_id: Some(output_lot),
+                    ..line(product_item, floor, "1000")
+                }],
+                ..addition.clone()
+            },
+            "Insufficient",
+        ),
+    ] {
+        refusal(
+            label,
+            pe.complete_operation(&admin, 1, order.id, Source::Import, &request)
+                .await,
+            expected,
+        )?;
+    }
+    refusal(
+        "reuse still requires import authorization on replay",
+        pe.complete_operation(&manager, 1, order.id, Source::Import, &addition)
+            .await,
+        "Import not authorized",
+    )?;
+    verify(
+        "refused corrections preserve executions, ledger and mutation audit",
+        before_refusals
+            == (
+                count("factory_operation_executions").await?,
+                count("factory_inventory_transactions").await?,
+                count("base_audit_mutations").await?,
+            ),
+    )?;
+    client
+        .batch_execute("ALTER TABLE factory_operation_executions ADD CONSTRAINT fixture_existing_output_refuse CHECK(request_id <> 'existing-output-rollback')")
+        .await?;
+    refusal(
+        "an execution failure rolls back an addition to an existing lot",
+        pe.complete_operation(
+            &admin,
+            1,
+            order.id,
+            Source::Import,
+            &Completion {
+                request_id: "existing-output-rollback".into(),
+                ..addition.clone()
+            },
+        )
+        .await,
+        "Database unavailable",
+    )?;
+    client
+        .batch_execute("ALTER TABLE factory_operation_executions DROP CONSTRAINT fixture_existing_output_refuse")
+        .await?;
+    verify(
+        "rollback retains the lot balance and all earlier audit history",
+        inventory
+            .get_identity_positions(&manager, 1, output_lot)
+            .await?[0]
+            .quantity
+            == "6.000000000000"
+            && before_refusals
+                == (
+                    count("factory_operation_executions").await?,
+                    count("factory_inventory_transactions").await?,
+                    count("base_audit_mutations").await?,
+                ),
+    )?;
+    let audited = client.query_one("SELECT count(*) FROM base_audit_mutations WHERE (auditable_type='factory_inventory_transactions' AND auditable_id=$1::bigint::text) OR (auditable_type='factory_operation_executions' AND auditable_id=$2::bigint::text) OR (auditable_type='factory_inventory_transaction_entries' AND auditable_id IN (SELECT id::text FROM factory_inventory_transaction_entries WHERE transaction_id=$1)) OR (auditable_type='factory_inventory_genealogy_links' AND auditable_id IN (SELECT id::text FROM factory_inventory_genealogy_links WHERE transaction_id=$1))", &[&addition_posting.id,&added.id]).await?.get::<_,i64>(0);
+    verify(
+        "the reused-identity execution, posting, entries and genealogy are audited",
+        audited
+            == 2 + addition_posting.entries.len() as i64 + addition_posting.genealogy.len() as i64,
+    )?;
     println!("production execution walkthrough complete");
     Ok(())
 }

@@ -572,7 +572,7 @@ async fn main() -> Result<(), Error> {
         "Identity required",
     )?;
     refusal(
-        "a transform output citing an identity",
+        "a transform output citing another material's identity",
         inventory
             .record_transform(
                 &manager,
@@ -582,13 +582,13 @@ async fn main() -> Result<(), Error> {
                     input(),
                     vec![StockLine {
                         identity_id: Some(lot_1),
-                        ..line(source, floor, "40")
+                        ..line(part, floor, "40")
                     }],
                 ),
                 &AUTHORITY,
             )
             .await,
-        "Invalid identity",
+        "Identity not found",
     )?;
     let first = PostingRequest {
         variance: shared("weighed loss on the run sheet"),
@@ -956,6 +956,58 @@ async fn main() -> Result<(), Error> {
         audited.get::<_, i64>(0) == audited.get::<_, i64>(1)
             && audited.get::<_, i64>(2) == audited.get::<_, i64>(3)
             && audited.get::<_, i64>(2) == 5,
+    )?;
+    println!("== additions to existing output identities");
+    inventory
+        .record_output(
+            &manager,
+            1,
+            &request(
+                "existing-unit-output",
+                vec![
+                    StockLine {
+                        identity_id: Some(part_1),
+                        ..line(part, floor, "3")
+                    },
+                    StockLine {
+                        identity: unit_with("PART-OTHER-OUTPUT", "250"),
+                        ..line(part, floor, "3")
+                    },
+                ],
+            ),
+            &AUTHORITY,
+        )
+        .await?;
+    verify(
+        "adding to a fully drawn unit retains its original dimensions and source",
+        inventory.get_identity(&manager, 1, part_1).await? == part_identity
+            && inventory
+                .get_identity_positions(&manager, 1, part_1)
+                .await?[0]
+                .quantity
+                == "3.000000000000",
+    )?;
+    refusal(
+        "a transform addition cannot fund its own identity withdrawal",
+        inventory
+            .record_transform(
+                &manager,
+                1,
+                &transform(
+                    "existing-unit-overdraw",
+                    vec![StockLine {
+                        identity_id: Some(part_1),
+                        ..line(part, floor, "4")
+                    }],
+                    vec![StockLine {
+                        identity_id: Some(part_1),
+                        ..line(part, floor, "4")
+                    }],
+                ),
+                &AUTHORITY,
+            )
+            .await,
+        "Insufficient identity stock",
     )?;
     println!("XI3 walkthrough complete");
     Ok(())
