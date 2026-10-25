@@ -420,11 +420,30 @@ impl Completer {
         {
             return Err(Error::InvalidHoldSource);
         }
-        let added_at = self
-            .inventory
-            .get_identity_last_added_on(client, scope, company, identity_id, request.completed_at)
-            .await?
-            .unwrap_or(source.effective_at);
+        let last_added = if request.source == Source::Import {
+            let import = self
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.inventory
+                .get_import_identity_last_added_on(
+                    client,
+                    &import,
+                    identity_id,
+                    request.completed_at,
+                )
+                .await?
+        } else {
+            self.inventory
+                .get_identity_last_added_on(
+                    client,
+                    scope,
+                    company,
+                    identity_id,
+                    request.completed_at,
+                )
+                .await?
+        };
+        let added_at = last_added.unwrap_or(source.effective_at);
         let age = request
             .completed_at
             .duration_since(added_at)

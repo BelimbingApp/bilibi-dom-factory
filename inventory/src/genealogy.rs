@@ -90,6 +90,16 @@ pub(crate) async fn last_added(
     until: std::time::SystemTime,
 ) -> Result<Option<std::time::SystemTime>, Error> {
     access::readable(client, scope, company).await?;
+    last_added_authorized(client, scope, company, id, until).await
+}
+
+pub(crate) async fn last_added_authorized(
+    client: &impl GenericClient,
+    scope: &Scope,
+    company: i64,
+    id: i64,
+    until: std::time::SystemTime,
+) -> Result<Option<std::time::SystemTime>, Error> {
     Ok(client.query_one("SELECT max(t.effective_at) FROM factory_inventory_transactions t JOIN factory_inventory_transaction_entries e ON e.tenant_id=t.tenant_id AND e.company_id=t.company_id AND e.transaction_id=t.id WHERE t.tenant_id=$1 AND t.company_id=$2 AND e.identity_id=$3 AND e.role='stock' AND e.native_quantity>0 AND t.kind IN ('receipt','output','transform') AND t.effective_at<=$4", &[&scope.tenant(), &company, &id, &until]).await?.get(0))
 }
 

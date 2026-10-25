@@ -288,7 +288,9 @@ second connection could exhaust the pool with concurrent writers.
 `normalize_property_definitions` and `validate_property_values` expose the
 shared property contract through Inventory, without exposing private helpers.
 `get_identity_last_added_on` reads when an identity last received stock, on a
-caller's client, for hold ages.
+caller's client, for hold ages; `get_import_identity_last_added_on` is its
+import-sealed form, checking only the import grant like the other `get_import_*`
+reads.
 
 ## Settings
 
