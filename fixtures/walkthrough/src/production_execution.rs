@@ -1403,6 +1403,22 @@ async fn main() -> Result<(), Error> {
             .await,
         "Access denied",
     )?;
+    refusal(
+        "import cannot post an ordinary inventory receipt",
+        inventory
+            .record_receipt(
+                &principal,
+                1,
+                &PostingRequest {
+                    request_id: "import-only-ordinary-receipt".into(),
+                    evidence: "fixture".into(),
+                    lines: vec![line(free, store, "1")],
+                    ..Default::default()
+                },
+            )
+            .await,
+        "Access denied",
+    )?;
     let foreign_company: i64 = client
         .query_one("SELECT id FROM companies WHERE tenant_id<>1 LIMIT 1", &[])
         .await?
