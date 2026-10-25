@@ -90,9 +90,11 @@ routing `process_config.material_hold_rules` entry keyed by the input's item ID
 (an object or a list of objects), makes each matching actual input name an
 Inventory `identity_id`; the longest minimum governs, and a rule without a
 positive integer `hours` is `Invalid material hold rule`. The hold runs from
-the identity's source transaction (a receipt, output or transform that put the
-identity into stock, not after the completion) to the completion time; a missing
-identity, a mismatched item or a future source is `Invalid hold source`.
+the identity's latest addition (the newest receipt, output or transform that put
+stock of it in, at or before the completion; its source transaction if none is
+found) to the completion time, so an import addition holds the whole lot again;
+a missing identity, a mismatched item or a future source is `Invalid hold
+source`.
 Consuming early without a `hold_override` is `Material held`.
 
 A `HoldOverrideRequest` is authorized as the Scope's own user in the order's
