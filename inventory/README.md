@@ -233,6 +233,10 @@ A production module can opt its private registered `PostingAuthority` into its o
 
 `record_import_on` accepts only completion inputs and outputs, choosing production consumption, output or transform and creating their lot/unit identities through the same ledger path. Configuration, ordinary postings and production corrections retain their existing gates. `get_import_identity_on` and `get_import_transaction_on` read the immutable evidence an import validates or returns. Product Definition accepts the sealed access only for exact revision and routed resource reads. The owning Production Execution import facade is documented in [`production_execution/README.md`](../production_execution/README.md#imports).
 
+The sealed import path also provides `get_import_material_on(client, import, item_id)` and `get_import_conversion_on(client, import, item_id, unit_id, version)`. The conversion version is required and a missing version returns `ConversionNotFound`. Both reuse the ordinary material and conversion readers after checking the import grant and live company.
+
+Production Execution uses `trace_import_backward_on`, `list_import_corrections_on`, `get_import_transaction_balance_on` and `get_import_unit_on` to assemble backward traces and run yield through Inventory's own records. Each takes the caller's connection, sealed import access and record ID, and repeats authorization. They grant no configuration or correction writes. Ordinary read capabilities are unchanged.
+
 ## Posting authority
 
 Receipts, transfers, ordinary consumption and corrections are open to any
@@ -356,10 +360,3 @@ values. Conversion rows are append-only (UPDATE, DELETE and TRUNCATE are
 refused) and never name the material's native unit. The adopted Belimbing
 defaults for status (`draft`) and currency are not carried: both come from
 the company's settings or the request.
-
-
-### Import reads
-
-The sealed import path also provides `get_import_material_on(client, import, item_id)` and `get_import_conversion_on(client, import, item_id, unit_id, version)`. The conversion version is required and a missing version returns `ConversionNotFound`. Both reuse the ordinary material and conversion readers after checking the import grant and live company.
-
-Production Execution uses `trace_import_backward_on`, `list_import_corrections_on`, `get_import_transaction_balance_on` and `get_import_unit_on` to assemble backward traces and run yield through Inventory's own records. Each takes the caller's connection, sealed import access and record ID, and repeats authorization. They grant no configuration or correction writes. Ordinary read capabilities are unchanged.
