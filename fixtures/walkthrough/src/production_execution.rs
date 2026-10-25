@@ -245,7 +245,8 @@ async fn main() -> Result<(), Error> {
             {"item_id":held,"unit_id":kg.id,"role":"input","quantity":"10","material_hold_rule":{"hours":2}},
             {"item_id":free,"unit_id":kg.id,"role":"input","quantity":"5"},
             {"item_id":product_item,"unit_id":kg.id,"role":"output","quantity":"14"},
-            {"item_id":trim,"unit_id":kg.id,"role":"output","quantity":"1"}
+            {"item_id":trim,"unit_id":kg.id,"role":"output","quantity":"1"},
+            {"item_id":held,"unit_id":kg.id,"role":"output","quantity":"1"}
         ]}),
     )
     .await?;
