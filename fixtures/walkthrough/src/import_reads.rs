@@ -74,6 +74,57 @@ pub(super) async fn run(
         format!("{:?}", importer.get_run_yield(execution).await?)
             == format!("{:?}", pe.get_run_yield(manager, 1, execution).await?),
     )?;
+    // Exercise the import-only yield reads of wastage and its correction chain.
+    for capability in [
+        "factory.production-execution.wastage.record",
+        "factory.production-execution.wastage.correct",
+    ] {
+        grants
+            .set_direct(admin, manager.user(), capability, Some(true))
+            .await?;
+    }
+    let reason = pe
+        .create_wastage_reason(
+            manager,
+            1,
+            &serde_json::json!({"code":"IMPORT-READ", "label":"Import read proof"}),
+        )
+        .await?;
+    let posting = importer
+        .get_transaction(
+            importer
+                .get_execution(execution)
+                .await?
+                .inventory_transaction_id,
+        )
+        .await?;
+    let output = posting
+        .entries
+        .iter()
+        .find(|entry| entry.identity_id == Some(identity) && entry.role == "stock")
+        .ok_or("missing import output")?;
+    let waste = pe.record_wastage(manager, 1, execution, &serde_json::json!({"request_id":"import-read-wastage", "reason_id":reason["id"], "item_id":material, "location_id":output.location_id, "identity_id":identity, "quantity":"0.25", "observation":"measured"})).await?;
+    pe.correct_wastage(manager, 1, waste["id"].as_i64().ok_or("missing wastage id")?, &serde_json::json!({"request_id":"import-read-wastage-correction", "quantity":"0.125", "correction_reason":"Import read proof"})).await?;
+    let corrected = importer.get_run_yield(execution).await?;
+    verify(
+        "import yield includes exact wastage and its correction postings",
+        corrected.wastage_transaction_ids.len() == 2
+            && corrected.balances.iter().any(|balance| {
+                balance.wastage.parse::<bilibi_factory_inventory::Decimal>() == Ok(decimal("0.125"))
+            }),
+    )?;
+    verify(
+        "corrected import yield matches ordinary yield",
+        format!("{corrected:?}") == format!("{:?}", pe.get_run_yield(manager, 1, execution).await?),
+    )?;
+    for capability in [
+        "factory.production-execution.wastage.record",
+        "factory.production-execution.wastage.correct",
+    ] {
+        grants
+            .set_direct(admin, manager.user(), capability, None)
+            .await?;
+    }
     let trace = importer.trace_backward(identity).await?;
     verify(
         "import trace includes source lots and enriched production runs",
