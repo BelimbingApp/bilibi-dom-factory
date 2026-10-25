@@ -148,7 +148,7 @@ pub(super) async fn run(
     refusal(
         "missing material stays missing",
         importer.get_material(i64::MAX).await,
-        "Material not found",
+        "Item not found",
     )?;
     refusal(
         "missing run stays missing",
