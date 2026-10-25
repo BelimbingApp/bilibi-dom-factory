@@ -29,9 +29,10 @@ Product Definition and posts through Inventory).
   Bilimbi does), `list_executions` (most recently completed first; 100 by
   default, at most 500, following the bounded-read convention), `get_execution`.
 - `complete_operation(order, Source, Completion)`: one routed operation, live
-  or imported. Both validate and post identically; an import first needs
-  `factory.production-execution.import` (`Import not authorized` before
-  anything is posted, and again on every retry). The `Completion` carries a
+  or imported. Both validate and post identically; an import needs
+  `factory.production-execution.import` instead of `configuration.manage` or
+  `floor.view` (`Import not authorized` before anything is posted, and again
+  on every retry). The `Completion` carries a
   company-unique `request_id` (at most 240 bytes), `operation_code`,
   `resource_id` (one the operation allows), `operator_type`/`operator_id` (who
   did the work), `started_at`/`completed_at` (completion not in the future),
