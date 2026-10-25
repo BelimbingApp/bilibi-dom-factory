@@ -439,7 +439,7 @@ async fn review_posting(
         .is_some();
     let pairs = touched(&request);
     let before = stock_figures(tx, tenant, company, &pairs).await?;
-    let posted = ledger::post(tx, scope, company, kind, &request, None)
+    let posted = ledger::post(tx, scope, company, kind, &request, None, None)
         .await
         .map_err(refuse)?;
     let after = stock_figures(tx, tenant, company, &pairs).await?;
@@ -543,7 +543,7 @@ impl WriteHandler for Write {
                     let mut request = parse_posting(input)?;
                     request.effective_at = effective(tx.sql(), input).await?;
                     transaction_json(
-                        &ledger::post(tx, scope, company, *kind, &request, None)
+                        &ledger::post(tx, scope, company, *kind, &request, None, None)
                             .await
                             .map_err(refuse)?,
                     )

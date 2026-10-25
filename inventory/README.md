@@ -234,6 +234,12 @@ and the receipts among the identities' source transactions.
 identity, including consumption that created no link. Unidentified material
 remains supported.
 
+## Import posting access
+
+A production module can opt its private registered `PostingAuthority` into its own `<module>.import` capability with `with_import_capability`. Boot refuses a capability outside that module's namespace. `production_import(scope, company, authority)` seals access for one scope, company and registered authority; it caches no grant. Every use rechecks authorization on the caller's connection.
+
+`record_import_on` accepts only completion inputs and outputs, choosing production consumption, output or transform and creating their lot/unit identities through the same ledger path. Configuration, ordinary postings and production corrections retain their existing gates. `get_import_identity_on` and `get_import_transaction_on` read the immutable evidence an import validates or returns. Product Definition accepts the sealed access only for exact revision and routed resource reads. The owning Production Execution import facade is documented in [`production_execution/README.md`](../production_execution/README.md#imports).
+
 ## Posting authority
 
 Receipts, transfers, ordinary consumption and corrections are open to any

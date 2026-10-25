@@ -99,3 +99,7 @@ database. Then on a separate freshly migrated disposable database run the
 container walkthrough's `product-definition` binary (root README). It uses
 real sessions and the registered facades, including concurrent publication,
 capability and company refusals, retirement, exact selection and SQL immutability.
+
+## Production import reads
+
+`select_import_revisions_on` and `get_import_resource_on` serve import validation on the caller's connection. They require Inventory's sealed `ProductionImport`, issued only for a registered posting authority, and recheck its module's import grant and live company. Ordinary Product Definition reads and every configuration write retain their existing capabilities. See [`Production Execution imports`](../production_execution/README.md#imports) for the Extension-facing API.

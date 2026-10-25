@@ -14,7 +14,9 @@
 //! `commerce.inventory.item.create`/`.update`), the company as an authorized
 //! target, and a company that is not archived, and runs in one audited
 //! `MutationBoundary` transaction. A record of another company is reported as
-//! not found.
+//! not found. Explicit production imports use their registered authority's
+//! import grant for completion postings and immutable evidence reads instead
+//! of configuration grants; see [`ProductionImport`].
 use bilibi_database::{Db, MutationBoundary, MutationTransaction};
 use bilibi_module_registry::{Layer, Module, Service};
 use bilibi_settings::Settings;
@@ -29,6 +31,7 @@ mod contributions;
 mod conversions;
 mod error;
 mod genealogy;
+mod import;
 mod items;
 mod ledger;
 mod ledger_request;
@@ -40,7 +43,7 @@ mod settings;
 mod units;
 mod web;
 
-pub use authority::{PostingAuthority, POSTING_AUTHORITIES};
+pub use authority::{PostingAuthority, ProductionImport, POSTING_AUTHORITIES};
 pub use balance::{Balance, BalanceConversion, CrossUnitBalance, UnitBalance};
 pub use conversions::Conversion;
 pub use error::{Error, FieldError};
@@ -143,7 +146,7 @@ impl Inventory {
             .mutations
             .begin(&mut client, scope.mutation_context(action))
             .await?;
-        match ledger::post(&mut tx, scope, company_id, kind, request, authority).await {
+        match ledger::post(&mut tx, scope, company_id, kind, request, authority, None).await {
             Ok(saved) => {
                 tx.commit().await?;
                 Ok(saved)
@@ -170,7 +173,7 @@ impl Inventory {
         authority: &'static PostingAuthority,
     ) -> Result<MaterialTransaction> {
         let authority = self.registered(authority)?;
-        ledger::post(tx, scope, company_id, kind, request, authority).await
+        ledger::post(tx, scope, company_id, kind, request, authority, None).await
     }
 
     /// [`Inventory::record_production_consumption`] on the caller's transaction.

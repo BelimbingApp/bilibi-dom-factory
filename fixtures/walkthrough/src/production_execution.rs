@@ -6,7 +6,8 @@
 //! production entry point.
 use bilibi_audit::RequestInfo;
 use bilibi_authz::{
-    grants::Grants, CapabilityDefinition, RoleDefinition, VocabularyContribution, VOCABULARY,
+    grants::Grants, CapabilityDefinition, RoleDefinition, SystemAuthentication,
+    SystemPrincipalDefinition, SystemScope, VocabularyContribution, VOCABULARY,
 };
 use bilibi_factory_inventory::{
     Decimal, IdentityKind, Inventory, MaterialTyping, NewIdentity, NewItem, NewLocation, NewUnit,
@@ -29,7 +30,7 @@ use std::{
 bilibi_walkthrough_fixture::walkthrough_vocabulary!();
 bilibi_walkthrough_fixture::walkthrough_module_roles!();
 bilibi_walkthrough_fixture::inventory::submit! { bilibi_walkthrough_fixture::registry::Contribution::new(VOCABULARY,"factory.xp1.roles",bilibi_walkthrough_fixture::registry::Provenance {module:"base/authz",source:file!(),line:line!()}, &VocabularyContribution {
-    domains:&[],verbs:&[],capabilities:&[] as &[CapabilityDefinition],system_principals:&[],
+    domains:&[],verbs:&[],capabilities:&[] as &[CapabilityDefinition],system_principals:&[SystemPrincipalDefinition {name:"factory-import-fixture",capabilities:&["factory.production-execution.import"]}],
     roles:&[
         RoleDefinition {code:"manager",name:"manager",description:"Walkthrough fixture role",grant_all:false,capabilities:&["factory.production-execution.floor.view","factory.production-execution.configuration.view","factory.production-execution.configuration.manage","factory.product-definition.configuration.view","factory.product-definition.configuration.manage","factory.inventory.configuration.view","factory.inventory.configuration.manage","commerce.inventory.item.create","commerce.inventory.item.view"]},
         RoleDefinition {code:"viewer",name:"viewer",description:"Walkthrough fixture role",grant_all:false,capabilities:&["factory.production-execution.floor.view"]},
@@ -1157,6 +1158,384 @@ async fn main() -> Result<(), Error> {
         pe.complete_operation(&manager, 1, order.id, Source::Import, &import_3)
             .await,
         "Import not authorized",
+    )?;
+
+    println!("== import-only system principal");
+    // This disposable facade fixture enrolls no authenticator. The Platform
+    // explicitly permits fixture-only enforcement control (Step-up README).
+    app.step_up.set_enforced(false);
+    let grants = app.services.get::<Grants>("base/authz.grants")?;
+    let system = SystemScope::rehydrate(&**client, 1, Some("factory-import-fixture")).await?;
+    let authentication = app
+        .services
+        .get::<bilibi_tenancy::Authentication>("base/tenancy.authentication")?;
+    let principal = authentication.for_system(&**client, &system).await?;
+    let importer = pe.importer(&principal, 1)?;
+    let import_order = NewOrder {
+        code: "ORD-IMPORT-ONLY".into(),
+        ..new_order.clone()
+    };
+    refusal(
+        "declaring a principal grants nothing",
+        importer.create_order(&import_order).await,
+        "Access denied",
+    )?;
+    grants
+        .set_system(
+            &admin,
+            "factory-import-fixture",
+            "factory.production-execution.import",
+            Some(true),
+        )
+        .await?;
+    let header = importer.create_order(&import_order).await?;
+    verify(
+        "import-only principal creates and recovers its header",
+        importer
+            .list_orders(Some(500))
+            .await?
+            .iter()
+            .any(|order| order.id == header.id),
+    )?;
+    refusal(
+        "ordinary order creation still requires manage",
+        pe.create_order(
+            &principal,
+            1,
+            &NewOrder {
+                code: "ORD-NORMAL-REFUSED".into(),
+                ..new_order.clone()
+            },
+        )
+        .await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary order reads still require floor view",
+        pe.list_orders(&principal, 1, None).await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary inventory reads still require view",
+        inventory.get_identity(&principal, 1, aged).await,
+        "Access denied",
+    )?;
+    refusal(
+        "ordinary definition reads still require view",
+        pd.select_revisions(&principal, 1, product.id, 1, 1).await,
+        "Access denied",
+    )?;
+    let imported_run = Completion {
+        inputs: vec![
+            StockLine {
+                identity_id: Some(aged),
+                ..line(held, store, "1")
+            },
+            StockLine {
+                identity_id: Some(free_lot),
+                ..line(free, store, "1")
+            },
+        ],
+        outputs: vec![StockLine {
+            identity: lot("IMPORT-ONLY-LOT"),
+            ..line(product_item, floor, "2")
+        }],
+        ..blend("import-only-transform", aged)
+    };
+    refusal(
+        "import-only cannot record live work",
+        pe.complete_operation(&principal, 1, header.id, Source::Live, &imported_run)
+            .await,
+        "Access denied",
+    )?;
+    let imported = importer
+        .complete_operation(header.id, &imported_run)
+        .await?;
+    let posted = importer
+        .get_transaction(imported.inventory_transaction_id)
+        .await?;
+    let output_identity = posted
+        .entries
+        .iter()
+        .find(|entry| entry.native_quantity.starts_with('2') && entry.role == "stock")
+        .and_then(|entry| entry.identity_id)
+        .ok_or("missing imported lot")?;
+    verify(
+        "import-only transforms mature held inputs and creates a lot",
+        posted.kind == "transform"
+            && importer.get_identity(output_identity).await?.code == "IMPORT-ONLY-LOT"
+            && importer.get_execution(imported.id).await?.id == imported.id,
+    )?;
+    verify(
+        "import-only replay posts nothing twice",
+        importer
+            .complete_operation(header.id, &imported_run)
+            .await?
+            .id
+            == imported.id,
+    )?;
+    refusal(
+        "changed import retry conflicts",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    evidence: "changed".into(),
+                    ..imported_run.clone()
+                },
+            )
+            .await,
+        "Request id conflict",
+    )?;
+    refusal(
+        "import does not grant a hold override",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-held".into(),
+                    inputs: vec![StockLine {
+                        identity_id: Some(fresh),
+                        ..line(held, store, "1")
+                    }],
+                    outputs: vec![],
+                    hold_override: Some(HoldOverrideRequest {
+                        reason: "early".into(),
+                        evidence: Some("history".into()),
+                        occurred_at: Some(completed),
+                        approver: None,
+                    }),
+                    ..imported_run.clone()
+                },
+            )
+            .await,
+        "Hold override denied",
+    )?;
+    let unit_run = Completion {
+        request_id: "import-only-unit".into(),
+        operation_code: "make".into(),
+        inputs: vec![],
+        outputs: vec![StockLine {
+            identity: Some(NewIdentity {
+                kind: IdentityKind::Unit,
+                code: "IMPORT-ONLY-UNIT".into(),
+                dimensions: BTreeMap::new(),
+            }),
+            ..line(product_item, floor, "1")
+        }],
+        ..imported_run.clone()
+    };
+    let unit_execution = importer.complete_operation(header.id, &unit_run).await?;
+    let unit_post = importer
+        .get_transaction(unit_execution.inventory_transaction_id)
+        .await?;
+    verify(
+        "import-only output creates an identified unit",
+        unit_post.kind == "output"
+            && importer.get_identity(identity(&unit_post, 0)).await?.kind == IdentityKind::Unit,
+    )?;
+    let consumed = importer
+        .complete_operation(
+            header.id,
+            &Completion {
+                request_id: "import-only-consumption".into(),
+                operation_code: "fails".into(),
+                inputs: vec![StockLine {
+                    identity_id: Some(free_lot),
+                    ..line(free, store, "1")
+                }],
+                outputs: vec![],
+                ..imported_run.clone()
+            },
+        )
+        .await?;
+    verify(
+        "import-only consumption posts through its authority",
+        importer
+            .get_transaction(consumed.inventory_transaction_id)
+            .await?
+            .kind
+            == "consumption",
+    )?;
+    let before = (
+        count("factory_operation_executions").await?,
+        count("factory_inventory_transactions").await?,
+        count("factory_inventory_identities").await?,
+    );
+    refusal(
+        "invalid import rolls back execution posting and identity",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-invalid".into(),
+                    outputs: vec![StockLine {
+                        identity: lot("IMPORT-ROLLBACK"),
+                        location_id: Some(i64::MAX),
+                        ..line(product_item, floor, "2")
+                    }],
+                    ..imported_run.clone()
+                },
+            )
+            .await,
+        "Location not found",
+    )?;
+    verify(
+        "invalid import leaves no business rows",
+        before
+            == (
+                count("factory_operation_executions").await?,
+                count("factory_inventory_transactions").await?,
+                count("factory_inventory_identities").await?,
+            ),
+    )?;
+    refusal(
+        "import cannot write ordinary inventory configuration",
+        inventory
+            .create_location(
+                &principal,
+                1,
+                &NewLocation {
+                    code: "REFUSED".into(),
+                    name: "Refused".into(),
+                },
+            )
+            .await,
+        "Access denied",
+    )?;
+    refusal(
+        "import cannot post an ordinary inventory receipt",
+        inventory
+            .record_receipt(
+                &principal,
+                1,
+                &PostingRequest {
+                    request_id: "import-only-ordinary-receipt".into(),
+                    evidence: "fixture".into(),
+                    lines: vec![line(free, store, "1")],
+                    ..Default::default()
+                },
+            )
+            .await,
+        "Access denied",
+    )?;
+    let foreign_company: i64 = client
+        .query_one("SELECT id FROM companies WHERE tenant_id<>1 LIMIT 1", &[])
+        .await?
+        .get(0);
+    refusal(
+        "import stays in its tenant",
+        pe.importer(&principal, foreign_company)?
+            .create_order(&NewOrder {
+                code: "FOREIGN-IMPORT".into(),
+                ..new_order.clone()
+            })
+            .await,
+        "Not found",
+    )?;
+    client.batch_execute("ALTER TABLE factory_operation_executions ADD CONSTRAINT fixture_refuse_import CHECK(request_id <> 'import-only-late-failure')").await?;
+    let before_late = (
+        count("factory_operation_executions").await?,
+        count("factory_inventory_transactions").await?,
+        count("factory_inventory_identities").await?,
+    );
+    refusal(
+        "execution failure rolls back an imported output and its unit",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-late-failure".into(),
+                    outputs: vec![StockLine {
+                        identity: Some(NewIdentity {
+                            kind: IdentityKind::Unit,
+                            code: "IMPORT-LATE-ROLLBACK".into(),
+                            dimensions: BTreeMap::new(),
+                        }),
+                        ..line(product_item, floor, "1")
+                    }],
+                    ..unit_run.clone()
+                },
+            )
+            .await,
+        "Database unavailable",
+    )?;
+    client
+        .batch_execute(
+            "ALTER TABLE factory_operation_executions DROP CONSTRAINT fixture_refuse_import",
+        )
+        .await?;
+    verify(
+        "late import failure leaves no execution transaction or identity",
+        before_late
+            == (
+                count("factory_operation_executions").await?,
+                count("factory_inventory_transactions").await?,
+                count("factory_inventory_identities").await?,
+            ),
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET status='archived' WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    refusal(
+        "import cannot create in an archived company",
+        importer
+            .create_order(&NewOrder {
+                code: "ARCHIVED-IMPORT".into(),
+                ..new_order.clone()
+            })
+            .await,
+        "archived",
+    )?;
+    refusal(
+        "import cannot complete in an archived company",
+        importer
+            .complete_operation(
+                header.id,
+                &Completion {
+                    request_id: "import-only-archived".into(),
+                    ..unit_run.clone()
+                },
+            )
+            .await,
+        "archived",
+    )?;
+    client
+        .execute(
+            "UPDATE companies SET status='active' WHERE tenant_id=1 AND id=1",
+            &[],
+        )
+        .await?;
+    grants
+        .set_system(
+            &admin,
+            "factory-import-fixture",
+            "factory.production-execution.import",
+            Some(false),
+        )
+        .await?;
+    refusal(
+        "retained import access cannot replay after revocation",
+        importer.complete_operation(header.id, &imported_run).await,
+        "Import not authorized",
+    )?;
+    refusal(
+        "retained import access cannot read after revocation",
+        importer.get_identity(output_identity).await,
+        "Access denied",
+    )?;
+    refusal(
+        "retained import access cannot create after revocation",
+        importer
+            .create_order(&NewOrder {
+                code: "AFTER-REVOKE".into(),
+                ..new_order.clone()
+            })
+            .await,
+        "Access denied",
     )?;
 
     println!("== audit and isolation");

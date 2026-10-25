@@ -9,7 +9,7 @@ Bilimbi `ProductionExecution` at `f39ed3dcf2ce2694d30c2b88e82212780f4f3b98`.
 ## Facade
 
 Order and execution reads take a sealed scope and company, require
-`factory.production-execution.floor.view`, and check the live company. Every
+`factory.production-execution.floor.view`, and check the live company. Every ordinary
 order/completion write rechecks `factory.production-execution.configuration.manage` and the
 authorized writable company inside `MutationBoundary`. `tenant_owner` holds
 `floor.view`, `configuration.view` and `configuration.manage`; an administrator
@@ -29,9 +29,10 @@ Product Definition and posts through Inventory).
   Bilimbi does), `list_executions` (most recently completed first; 100 by
   default, at most 500, following the bounded-read convention), `get_execution`.
 - `complete_operation(order, Source, Completion)`: one routed operation, live
-  or imported. Both validate and post identically; an import first needs
-  `factory.production-execution.import` (`Import not authorized` before
-  anything is posted, and again on every retry). The `Completion` carries a
+  or imported. Both validate and post identically; an import needs
+  `factory.production-execution.import` instead of `configuration.manage` or
+  `floor.view` (`Import not authorized` before anything is posted, and again
+  on every retry). The `Completion` carries a
   company-unique `request_id` (at most 240 bytes), `operation_code`,
   `resource_id` (one the operation allows), `operator_type`/`operator_id` (who
   did the work), `started_at`/`completed_at` (completion not in the future),
@@ -44,6 +45,29 @@ Product Definition and posts through Inventory).
   with different content is `Request id conflict`.
 - `list_hold_overrides(execution)`: the immutable override evidence.
 
+## Imports
+
+An importer needs only `factory.production-execution.import` for Factory work. This matches Bilimbi's import reach without granting configuration management or general views. The ordinary facade, pages and reviewed agent operations keep their existing gates. `Source::Import` completion rechecks the import grant before validation, inside the transaction, and on retries. Material holds still require `material-hold.override` when drawn early.
+
+Use the explicit import facade for order headers and the immutable evidence an importer reads:
+
+```rust
+let importer = production_execution.importer(scope, company_id)?;
+let order = importer.create_order(&new_order).await?;
+let execution = importer.complete_operation(order.id, &completion).await?;
+let transaction = importer.get_transaction(execution.inventory_transaction_id).await?;
+```
+
+`Importer` also exposes `list_orders(limit)` for header recovery, `get_execution(id)` for retries, and `get_identity(id)` for output identity evidence. Each call rechecks the import grant and company; keeping an `Importer` after grant revocation grants nothing. Headers remain separate audited commits, as in `create_order`. Validation, exact revisions, ledger arithmetic, identity creation, company locks and completion atomicity are unchanged. Imports cannot use this facade to edit configuration or post ordinary receipts, transfers or corrections.
+
+### Upgrade notes for agents
+
+Extension owners adopting import-only authorization should replace Factory `create_order` and header-recovery `list_orders` calls with the corresponding `Importer` methods. Replace result reads through Production Execution `get_execution` and Inventory `get_transaction` / `get_identity` with `Importer` methods too. Completion may use `Importer::complete_operation` or the existing `complete_operation(..., Source::Import, ...)`.
+
+After updating and proving the complete import and retry flow, remove the five additional Factory grants from the principal declaration and its installed grants: `factory.production-execution.configuration.manage`, `factory.production-execution.floor.view`, `factory.inventory.configuration.view`, `factory.inventory.configuration.manage`, and `factory.product-definition.configuration.view`. Keep any grants independently needed for other work. For SBG, the remaining three keys are `sbg.ax-connector.capture.execute`, `sbg.ax-connector.connection.manage`, and `factory.production-execution.import`. SBG must adopt this API in its own change before shrinking its declaration.
+
+The Platform pin includes SP1's named system-principal `Scope`. Run the `production-execution` walkthrough on a fresh database to exercise an import-only principal, revocation, ordinary-path refusals, output lots and units, transforms, consumption, holds and rollback.
+
 ## Atomic posting
 
 The execution row, Inventory's material effects and any override evidence
@@ -53,7 +77,7 @@ contributes a private `static PostingAuthority` to
 Inventory's `_on` production functions, which run on the caller's open
 transaction (`record_transform_on` for inputs and outputs, `record_output_on`
 for outputs only, `record_production_consumption_on` for inputs only). Inventory
-still applies its own capability, company and idempotency checks; its
+still applies company and idempotency checks and the applicable ordinary or import capability; its
 transaction `request_id` is `pe:<request_id>` and carries the run's context
 (`operation_execution` = the request ID, `order_or_batch` = the order code,
 `work_centre` = the resource ID). The company row lock serializes concurrent

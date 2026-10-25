@@ -15,6 +15,7 @@ mod codes;
 mod completion;
 mod contributions;
 mod error;
+mod import;
 mod labour;
 mod measurements;
 mod model;
@@ -23,6 +24,7 @@ mod outcomes;
 mod wastage;
 mod web;
 pub use error::Error;
+pub use import::Importer;
 pub use model::{
     Approver, Completion, Execution, HoldOverride, HoldOverrideRequest, NewOrder, Order, OrderKind,
     Source,
@@ -39,7 +41,8 @@ const MAXIMUM_LIMIT: i64 = 500;
 
 // Shared only inside this module: Inventory accepts this contributed address.
 static AUTHORITY: bilibi_factory_inventory::PostingAuthority =
-    bilibi_factory_inventory::PostingAuthority::declare("factory/production_execution");
+    bilibi_factory_inventory::PostingAuthority::declare("factory/production_execution")
+        .with_import_capability(contributions::IMPORT);
 inventory::submit! { bilibi_module_registry::Contribution::new(
     bilibi_factory_inventory::POSTING_AUTHORITIES,"factory/production_execution",
     bilibi_module_registry::Provenance {module:"factory/production_execution",source:file!(),line:line!()},
@@ -94,24 +97,56 @@ impl ProductionExecution {
         company: i64,
         new: &NewOrder,
     ) -> Result<Order> {
+        self.create_order_for_on(tx, scope, company, new, Source::Live)
+            .await
+    }
+
+    async fn create_order_for_on(
+        &self,
+        tx: &mut bilibi_database::MutationTransaction<'_>,
+        scope: &Scope,
+        company: i64,
+        new: &NewOrder,
+        source: Source,
+    ) -> Result<Order> {
         bilibi_company::organisation::authorize_target(
             tx.sql(),
             scope,
             company,
-            contributions::MANAGE,
+            if source == Source::Import {
+                contributions::IMPORT
+            } else {
+                contributions::MANAGE
+            },
         )
         .await?;
         bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
-        self.product_definition
-            .select_revisions_on(
-                tx.sql(),
-                scope,
-                company,
-                new.product_id,
-                new.formula_version,
-                new.routing_version,
-            )
-            .await?;
+        if source == Source::Import {
+            let import = self
+                .completer
+                .inventory
+                .production_import(scope, company, &AUTHORITY)?;
+            self.product_definition
+                .select_import_revisions_on(
+                    tx.sql(),
+                    &import,
+                    new.product_id,
+                    new.formula_version,
+                    new.routing_version,
+                )
+                .await?;
+        } else {
+            self.product_definition
+                .select_revisions_on(
+                    tx.sql(),
+                    scope,
+                    company,
+                    new.product_id,
+                    new.formula_version,
+                    new.routing_version,
+                )
+                .await?;
+        }
         let field = |field, message| Error::Invalid { field, message };
         if new.code.trim().is_empty() {
             return Err(field("Code", "can't be blank"));
