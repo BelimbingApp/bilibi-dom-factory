@@ -255,7 +255,7 @@ async fn main() -> Result<(), Error> {
         product.id,
         &json!({"operations":[
             {"code":"blend","sequence":1,"inputs":[held,free],"outputs":[product_item,trim],"allowed_resource_ids":[r1]},
-            {"code":"make","sequence":2,"inputs":[],"outputs":[product_item],"allowed_resource_ids":[r1,r2]},
+            {"code":"make","sequence":2,"inputs":[],"outputs":[product_item,held],"allowed_resource_ids":[r1,r2]},
             {"code":"fails","sequence":3,"inputs":[free],"outputs":[trim],"allowed_resource_ids":[r1]}
         ]}),
     )
@@ -1766,6 +1766,118 @@ async fn main() -> Result<(), Error> {
                     count("factory_inventory_transactions").await?,
                     count("base_audit_mutations").await?,
                 ),
+    )?;
+    for (label, request) in [
+        (
+            "a live output-only completion cannot add to an existing lot",
+            Completion {
+                request_id: "existing-output-live".into(),
+                ..output_only.clone()
+            },
+        ),
+        (
+            "a live transform cannot add to an existing lot",
+            Completion {
+                request_id: "existing-output-live-transform".into(),
+                ..addition.clone()
+            },
+        ),
+    ] {
+        refusal(
+            label,
+            pe.complete_operation(&manager, 1, order.id, Source::Live, &request)
+                .await,
+            "Invalid identity",
+        )?;
+    }
+    verify(
+        "refused live reuse leaves the lot balance unchanged",
+        inventory
+            .get_identity_positions(&manager, 1, output_lot)
+            .await?[0]
+            .quantity
+            == "6.000000000000",
+    )?;
+    println!("== hold age of a lot with additions");
+    let held_output = |request_id: &str,
+                       identity: Option<NewIdentity>,
+                       identity_id: Option<i64>,
+                       quantity: &str,
+                       hours: u64| Completion {
+        request_id: request_id.into(),
+        operation_code: "make".into(),
+        inputs: vec![],
+        outputs: vec![StockLine {
+            identity,
+            identity_id,
+            ..line(held, store, quantity)
+        }],
+        started_at: ago(hours + 1),
+        completed_at: ago(hours),
+        ..blend(request_id, aged)
+    };
+    let held_origin = pe
+        .complete_operation(
+            &admin,
+            1,
+            order.id,
+            Source::Import,
+            &held_output("held-added-create", lot("HELD-ADDED"), None, "20", 6),
+        )
+        .await?;
+    let held_added = identity(
+        &inventory
+            .get_transaction(&manager, 1, held_origin.inventory_transaction_id)
+            .await?,
+        0,
+    );
+    pe.complete_operation(
+        &admin,
+        1,
+        order.id,
+        Source::Import,
+        &held_output("held-added-old", None, Some(held_added), "5", 5),
+    )
+    .await?;
+    pe.complete_operation(
+        &manager,
+        1,
+        order.id,
+        Source::Live,
+        &blend("hold-added-1", held_added),
+    )
+    .await?;
+    verify(
+        "a lot whose additions are all past the hold is drawn without an override",
+        inventory
+            .get_identity_positions(&manager, 1, held_added)
+            .await?[0]
+            .quantity
+            == "15.000000000000",
+    )?;
+    pe.complete_operation(
+        &admin,
+        1,
+        order.id,
+        Source::Import,
+        &Completion {
+            started_at: completed - Duration::from_secs(900),
+            completed_at: completed - Duration::from_secs(600),
+            ..held_output("held-added-fresh", None, Some(held_added), "20", 1)
+        },
+    )
+    .await?;
+    refusal(
+        "an addition inside the hold window holds the whole lot again",
+        pe.complete_operation(
+            &manager,
+            1,
+            order.id,
+            Source::Live,
+            &blend("hold-added-2", held_added),
+        )
+        .await,
+        "Material held",
     )?;
     let audited = client.query_one("SELECT count(*) FROM base_audit_mutations WHERE (auditable_type='factory_inventory_transactions' AND auditable_id=$1::bigint::text) OR (auditable_type='factory_operation_executions' AND auditable_id=$2::bigint::text) OR (auditable_type='factory_inventory_transaction_entries' AND auditable_id IN (SELECT id::text FROM factory_inventory_transaction_entries WHERE transaction_id=$1)) OR (auditable_type='factory_inventory_genealogy_links' AND auditable_id IN (SELECT id::text FROM factory_inventory_genealogy_links WHERE transaction_id=$1))", &[&addition_posting.id,&added.id]).await?.get::<_,i64>(0);
     verify(

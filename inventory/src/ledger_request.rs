@@ -54,9 +54,9 @@ impl Observation {
 ///
 /// A receipt, production output or transform output line may create a lot
 /// or unit `identity`; a transfer, consumption, correction, production output
-/// or transform line cites an existing one by `identity_id`. A positive
-/// output adds stock without replacing earlier postings or identity metadata.
-/// A line cannot carry both fields. `output_role` is the caller's
+/// or transform line cites an existing one by `identity_id`; Production
+/// Execution allows a positive output to do so for imports only. It adds
+/// stock without replacing earlier postings or identity metadata. A line cannot carry both fields. `output_role` is the caller's
 /// opaque label for a transform output; other lines drop it, as Bilimbi's
 /// cast does.
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -448,6 +448,20 @@ impl Inventory {
         genealogy::get(client, scope, company_id, identity_id).await
     }
 
+    /// The latest effective time at or before `until` at which stock of the
+    /// identity was added by a receipt, output or transform, on a sibling's
+    /// mutation connection; a hold ages from it, not from the identity's source.
+    pub async fn get_identity_last_added_on(
+        &self,
+        client: &impl tokio_postgres::GenericClient,
+        scope: &Scope,
+        company_id: i64,
+        identity_id: i64,
+        until: std::time::SystemTime,
+    ) -> Result<Option<std::time::SystemTime>> {
+        genealogy::last_added(client, scope, company_id, identity_id, until).await
+    }
+
     /// The identity's positive stock positions by location; empty once none
     /// remains in stock.
     pub async fn get_identity_positions(
