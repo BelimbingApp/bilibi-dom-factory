@@ -1161,6 +1161,9 @@ async fn main() -> Result<(), Error> {
     )?;
 
     println!("== import-only system principal");
+    // This disposable facade fixture enrolls no authenticator. The Platform
+    // explicitly permits fixture-only enforcement control (Step-up README).
+    app.step_up.set_enforced(false);
     let grants = app.services.get::<Grants>("base/authz.grants")?;
     let system = SystemScope::rehydrate(&**client, 1, Some("factory-import-fixture")).await?;
     let authentication = app
