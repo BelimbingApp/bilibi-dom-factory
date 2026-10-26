@@ -310,7 +310,7 @@ pub(crate) async fn post(
 ) -> Result<MaterialTransaction, Error> {
     if let Some(import) = import {
         import.authorize_on(tx.sql()).await?;
-        bilibi_company::organisation::require_writable(tx.sql(), scope, company, true).await?;
+        bilibi_company::require_writable(tx.sql(), scope, company, true).await?;
     } else {
         access::writable(tx.sql(), scope, company).await?;
     }

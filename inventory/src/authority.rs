@@ -117,14 +117,8 @@ impl<'a> ProductionImport<'a> {
             .authority
             .import_capability
             .ok_or(bilibi_database::Error::Forbidden)?;
-        bilibi_company::organisation::authorize_target(
-            client,
-            self.scope,
-            self.company,
-            capability,
-        )
-        .await?;
-        bilibi_company::organisation::require_live(client, self.scope, self.company).await?;
+        bilibi_company::authorize_target(client, self.scope, self.company, capability).await?;
+        bilibi_company::require_live(client, self.scope, self.company).await?;
         Ok(())
     }
 }

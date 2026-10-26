@@ -648,8 +648,7 @@ impl Completer {
         completion: &Completion,
     ) -> Result<(crate::Execution, bool)> {
         if source == Source::Live {
-            bilibi_company::authorize_target(tx.sql(), scope, company, MANAGE)
-                .await?;
+            bilibi_company::authorize_target(tx.sql(), scope, company, MANAGE).await?;
         }
         self.authorize_import(tx.sql(), scope, company, source)
             .await?;
