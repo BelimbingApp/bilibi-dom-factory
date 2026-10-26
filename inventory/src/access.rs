@@ -14,7 +14,7 @@ use crate::{
     error::{company, Error},
 };
 use bilibi_authz::authorize_key;
-use bilibi_company::organisation::{authorize_target, require_live, require_writable};
+use bilibi_company::{authorize_target, require_live, require_writable};
 use bilibi_tenancy::Scope;
 use tokio_postgres::GenericClient;
 

@@ -71,7 +71,7 @@ confirmations verbatim.
   in the facade on every write-shaped path (`access::writable`), and decide a
   refusal (a taken code, a retired record) before `mutate`, which treats a write
   with no `Change` as invalid.
-- Use `bilibi_company::organisation::{authorize_target, require_live,
+- Use `bilibi_company::{authorize_target, require_live,
   require_writable}` for the company, not `companies` SQL of your own.
 - Keep native ledger arithmetic in PostgreSQL, not `rust_decimal`: its
   `numeric(36,12)` quantities exceed Decimal's precision. Use the Inventory

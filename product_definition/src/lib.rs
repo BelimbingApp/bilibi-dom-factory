@@ -41,14 +41,9 @@ macro_rules! audited {
             .mutations
             .begin(&mut client, $scope.mutation_context($action))
             .await?;
-        bilibi_company::organisation::authorize_target(
-            $tx.sql(),
-            $scope,
-            $company,
-            contributions::MANAGE,
-        )
-        .await?;
-        bilibi_company::organisation::require_writable($tx.sql(), $scope, $company, true).await?;
+        bilibi_company::authorize_target($tx.sql(), $scope, $company, contributions::MANAGE)
+            .await?;
+        bilibi_company::require_writable($tx.sql(), $scope, $company, true).await?;
         let result: Result<_> = async { $body }.await;
         match result {
             Ok(value) => {
@@ -67,7 +62,7 @@ impl ProductDefinition {
     async fn read_client(&self, scope: &Scope, company: i64) -> Result<deadpool_postgres::Object> {
         let client = self.db.get().await.map_err(bilibi_database::Error::from)?;
         bilibi_authz::authorize_key(&**client, scope, contributions::VIEW).await?;
-        bilibi_company::organisation::require_live(&**client, scope, company).await?;
+        bilibi_company::require_live(&**client, scope, company).await?;
         Ok(client)
     }
     async fn get<T: DeserializeOwned>(
@@ -259,7 +254,7 @@ impl ProductDefinition {
         id: i64,
     ) -> Result<Resource> {
         bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
-        bilibi_company::organisation::require_live(client, scope, company).await?;
+        bilibi_company::require_live(client, scope, company).await?;
         store::fetch(client, scope, company, Kind::Resource, id).await
     }
     pub async fn list_resources(
@@ -386,7 +381,7 @@ impl ProductDefinition {
         routing_version: i32,
     ) -> Result<SelectedRevisions> {
         bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
-        bilibi_company::organisation::require_live(client, scope, company).await?;
+        bilibi_company::require_live(client, scope, company).await?;
         self.select_revisions_authorized(
             client,
             scope,
