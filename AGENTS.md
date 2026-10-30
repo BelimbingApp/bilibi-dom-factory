@@ -12,6 +12,7 @@ confirmations verbatim.
 
 ## Architecture
 
+- **No production users yet (until 2027-01-01).** Never build data imports, backfills, conversion of existing rows, or compatibility tables, columns or code paths; replace or drop them in a new migration. Development and walkthrough databases are disposable. After 2027-01-01 this rule no longer applies: ask the owner whether to extend it before relying on it.
 - Make each module deep: one small facade over its own records (`Inventory` in
   `inventory/src/lib.rs`), with schema, SQL, validation and helpers private,
   not a `pub` row type, query function or helper for a caller to reach. A
