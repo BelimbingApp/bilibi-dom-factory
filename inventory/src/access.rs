@@ -13,13 +13,12 @@ use crate::{
     contributions::{CONFIGURATION_MANAGE, CONFIGURATION_VIEW},
     error::{company, Error},
 };
-use bilibi_authz::authorize_key;
-use bilibi_company::{authorize_target, require_live, require_writable};
+use bilibi_company::{authorize_work_target, require_writable};
 use bilibi_tenancy::Scope;
 use tokio_postgres::GenericClient;
 
 pub(crate) async fn readable(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
 ) -> Result<(), Error> {
@@ -27,20 +26,19 @@ pub(crate) async fn readable(
 }
 
 pub(crate) async fn readable_for(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     capability: &str,
 ) -> Result<(), Error> {
-    authorize_key(client, scope, capability).await?;
-    require_live(client, scope, company_id)
+    authorize_work_target(client, scope, company_id, capability)
         .await
         .map_err(company)?;
     Ok(())
 }
 
 pub(crate) async fn writable(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
 ) -> Result<(), Error> {
@@ -48,12 +46,12 @@ pub(crate) async fn writable(
 }
 
 pub(crate) async fn writable_for(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     capability: &str,
 ) -> Result<(), Error> {
-    authorize_target(client, scope, company_id, capability)
+    authorize_work_target(client, scope, company_id, capability)
         .await
         .map_err(company)?;
     require_writable(client, scope, company_id, true).await?;

@@ -74,7 +74,7 @@ units AS (SELECT native_unit_id AS unit_id, min(ord) AS first FROM sided GROUP B
 const UNIT: &str = "u.id AS unit_id,u.code AS unit_code,u.name AS unit_name,u.retired_at IS NOT NULL AS unit_retired";
 
 pub(crate) async fn read(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -84,7 +84,7 @@ pub(crate) async fn read(
 }
 
 pub(crate) async fn read_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,

@@ -98,7 +98,7 @@ fn audited(item: &Item) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     status: Option<&str>,
@@ -118,7 +118,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,
@@ -129,7 +129,7 @@ pub(crate) async fn get(
 
 /// SKUs are stored upper-case, so the lookup is too.
 pub(crate) async fn get_by_sku(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     sku: &str,
@@ -150,7 +150,7 @@ pub(crate) async fn get_by_sku(
 }
 
 pub(crate) async fn fetch(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,

@@ -64,7 +64,7 @@ fn audited(kind: &MaterialType) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     requested: Option<i64>,
@@ -83,7 +83,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     material_type_id: i64,
@@ -95,7 +95,7 @@ pub(crate) async fn get(
 /// Reads a type, optionally with a row lock (`FOR SHARE` while a material
 /// takes it, `FOR UPDATE` while it changes).
 pub(crate) async fn fetch(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     material_type_id: i64,
@@ -113,7 +113,7 @@ pub(crate) async fn fetch(
 }
 
 async fn field_errors(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     company_id: i64,
     except: Option<i64>,
     code: &str,

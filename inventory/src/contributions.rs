@@ -63,6 +63,7 @@ bilibi_menu::contribute!(
 bilibi_menu::contribute!(
     "factory/inventory",
     MenuItem::page("admin.factory.units", "Units", "/factory/units")
+        .company_scoped()
         .under("admin.factory")
         .requires(Requirement::Capability(CONFIGURATION_VIEW))
         .order(20)
@@ -70,6 +71,7 @@ bilibi_menu::contribute!(
 bilibi_menu::contribute!(
     "factory/inventory",
     MenuItem::page("admin.factory.materials", "Materials", "/factory/materials")
+        .company_scoped()
         .under("admin.factory")
         .requires(Requirement::Capability(CONFIGURATION_VIEW))
         .order(5)
@@ -115,7 +117,7 @@ inventory::submit! { Contribution::new(DEFINITIONS, DEFAULT_CURRENCY_KEY, proven
 // capability. Each is checked again on every live event.
 macro_rules! page {
     ($id:literal, $path:literal, $operation:literal) => {
-        inventory::submit! { Contribution::new(ROUTES, $id, provenance!(), &Route {
+        inventory::submit! { Contribution::new(ROUTES, $id, provenance!(), &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
             method: Method::Get, path: $path, service: crate::web::SERVICE, operation: $operation,
             access: Access::Capability(CONFIGURATION_VIEW), framed: true,
         }) }

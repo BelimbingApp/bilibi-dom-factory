@@ -41,7 +41,7 @@ macro_rules! audited {
             .mutations
             .begin(&mut client, $scope.mutation_context($action))
             .await?;
-        bilibi_company::authorize_target($tx.sql(), $scope, $company, contributions::MANAGE)
+        bilibi_company::authorize_work_target($tx.sql(), $scope, $company, contributions::MANAGE)
             .await?;
         bilibi_company::require_writable($tx.sql(), $scope, $company, true).await?;
         let result: Result<_> = async { $body }.await;
@@ -61,8 +61,8 @@ macro_rules! audited {
 impl ProductDefinition {
     async fn read_client(&self, scope: &Scope, company: i64) -> Result<deadpool_postgres::Object> {
         let client = self.db.get().await.map_err(bilibi_database::Error::from)?;
-        bilibi_authz::authorize_key(&**client, scope, contributions::VIEW).await?;
-        bilibi_company::require_live(&**client, scope, company).await?;
+        bilibi_company::authorize_work_target(&**client, scope, company, contributions::VIEW)
+            .await?;
         Ok(client)
     }
     async fn get<T: DeserializeOwned>(
@@ -248,13 +248,12 @@ impl ProductDefinition {
     /// Scoped resource read on a sibling's mutation connection.
     pub async fn get_resource_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         id: i64,
     ) -> Result<Resource> {
-        bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
-        bilibi_company::require_live(client, scope, company).await?;
+        bilibi_company::authorize_work_target(client, scope, company, contributions::VIEW).await?;
         store::fetch(client, scope, company, Kind::Resource, id).await
     }
     pub async fn list_resources(
@@ -373,15 +372,14 @@ impl ProductDefinition {
     /// Exact revisions on the caller's connection, including pending data.
     pub async fn select_revisions_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         product: i64,
         formula_version: i32,
         routing_version: i32,
     ) -> Result<SelectedRevisions> {
-        bilibi_authz::authorize_key(client, scope, contributions::VIEW).await?;
-        bilibi_company::require_live(client, scope, company).await?;
+        bilibi_company::authorize_work_target(client, scope, company, contributions::VIEW).await?;
         self.select_revisions_authorized(
             client,
             scope,
@@ -396,7 +394,7 @@ impl ProductDefinition {
     /// Exact definition revisions needed by an authorized production import.
     pub async fn select_import_revisions_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &bilibi_factory_inventory::ProductionImport<'_>,
         product: i64,
         formula_version: i32,
@@ -417,7 +415,7 @@ impl ProductDefinition {
     /// The routed resource needed to validate an import.
     pub async fn get_import_resource_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &bilibi_factory_inventory::ProductionImport<'_>,
         id: i64,
     ) -> Result<Resource> {
@@ -427,7 +425,7 @@ impl ProductDefinition {
 
     async fn select_revisions_authorized(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         product: i64,

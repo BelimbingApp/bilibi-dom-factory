@@ -90,7 +90,7 @@ fn operations(value: &Value) -> Result<Vec<Operation>> {
     Ok(operations)
 }
 async fn items(
-    client: &impl tokio_postgres::GenericClient,
+    client: &(impl tokio_postgres::GenericClient + Sync),
     inventory: &Inventory,
     scope: &Scope,
     company: i64,

@@ -375,7 +375,9 @@ fn validate_lines(
         }
         if let Some(identity) = &line.identity {
             if !identity_valid(identity) {
-                return Err(fail("identity needs kind (lot or unit), a non-empty code of at most 255 bytes, and valid unit dimensions"));
+                return Err(fail(
+                    "identity needs kind (lot or unit), a non-empty code of at most 255 bytes, and valid unit dimensions",
+                ));
             }
         }
         if kind == TransactionKind::Transfer {

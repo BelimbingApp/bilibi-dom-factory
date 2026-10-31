@@ -148,11 +148,7 @@ async fn main() -> Result<(), Error> {
     let page = app
         .services
         .get::<PageService<Scope, DbError>>("factory/production_execution.pages")?;
-    let company = manager
-        .actor()
-        .organisation()
-        .ok_or("manager company")?
-        .get();
+    let company = manager.current_company().ok_or("manager company")?.get();
     let settings = app
         .services
         .get::<bilibi_settings::Settings>("base/settings.store")?;
@@ -170,9 +166,7 @@ async fn main() -> Result<(), Error> {
         .put(
             &mut tx,
             &manager,
-            bilibi_settings::Target::Company(
-                manager.actor().organisation().ok_or("manager company")?,
-            ),
+            bilibi_settings::Target::Company(manager.current_company().ok_or("manager company")?),
             bilibi_datetime::TIMEZONE_KEY,
             json!("Asia/Kuala_Lumpur"),
         )

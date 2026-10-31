@@ -308,7 +308,7 @@ impl Completer {
     /// posted. A live completion needs no import grant.
     async fn authorize_import(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         source: Source,
@@ -316,8 +316,13 @@ impl Completer {
         if source == Source::Live {
             return Ok(());
         }
-        match bilibi_company::authorize_target(client, scope, company, crate::contributions::IMPORT)
-            .await
+        match bilibi_company::authorize_work_target(
+            client,
+            scope,
+            company,
+            crate::contributions::IMPORT,
+        )
+        .await
         {
             Err(bilibi_database::Error::Forbidden) => Err(Error::ImportNotAuthorized),
             other => Ok(other.map(|_| ())?),
@@ -329,7 +334,7 @@ impl Completer {
     /// transaction, so a refused attempt keeps its decision log.
     async fn check_holds(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         request: &Request,
@@ -356,7 +361,7 @@ impl Completer {
 
     async fn check_hold(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         request: &Request,
@@ -447,7 +452,7 @@ impl Completer {
             return Ok(None);
         }
         let override_ = request.hold_override.as_ref().ok_or(Error::MaterialHeld)?;
-        match bilibi_company::authorize_target(client, scope, company, HOLD_OVERRIDE).await {
+        match bilibi_company::authorize_work_target(client, scope, company, HOLD_OVERRIDE).await {
             Ok(_) => Ok(Some(Applied {
                 approver: override_.approver.clone(),
                 recorder: override_.recorder.clone(),
@@ -562,7 +567,7 @@ impl Completer {
     /// repeats these checks; this result never authorizes a later write.
     pub(crate) async fn preflight(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         order_id: i64,
@@ -578,7 +583,7 @@ impl Completer {
 
     async fn prepare(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company: i64,
         order_id: i64,
@@ -588,7 +593,13 @@ impl Completer {
         self.authorize_import(client, scope, company, source)
             .await?;
         if source == Source::Live {
-            bilibi_authz::authorize_key(client, scope, crate::contributions::FLOOR_VIEW).await?;
+            bilibi_company::authorize_work_target(
+                client,
+                scope,
+                company,
+                crate::contributions::FLOOR_VIEW,
+            )
+            .await?;
         }
         bilibi_company::require_live(client, scope, company).await?;
         let order = orders::get_order(client, scope, company, order_id).await?;
@@ -648,7 +659,7 @@ impl Completer {
         completion: &Completion,
     ) -> Result<(crate::Execution, bool)> {
         if source == Source::Live {
-            bilibi_company::authorize_target(tx.sql(), scope, company, MANAGE).await?;
+            bilibi_company::authorize_work_target(tx.sql(), scope, company, MANAGE).await?;
         }
         self.authorize_import(tx.sql(), scope, company, source)
             .await?;
@@ -672,12 +683,14 @@ impl Completer {
         request: &Request,
         overrides: &[Applied],
     ) -> Result<(crate::Execution, bool)> {
-        use bilibi_company::{authorize_target, require_writable};
+        use bilibi_company::{authorize_work_target, require_writable};
         if request.source == Source::Live {
-            authorize_target(tx.sql(), scope, company, MANAGE).await?;
+            authorize_work_target(tx.sql(), scope, company, MANAGE).await?;
         }
         if request.source == Source::Import {
-            match authorize_target(tx.sql(), scope, company, crate::contributions::IMPORT).await {
+            match authorize_work_target(tx.sql(), scope, company, crate::contributions::IMPORT)
+                .await
+            {
                 Err(bilibi_database::Error::Forbidden) => return Err(Error::ImportNotAuthorized),
                 other => other.map(|_| ())?,
             }

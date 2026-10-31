@@ -14,7 +14,7 @@ pub(super) struct Labour {
     roles: Vec<Value>,
     rows: Vec<Value>,
     summary: Value,
-    users: Vec<bilibi_user::company_accounts::CompanyAccount>,
+    users: Vec<bilibi_user::CompanyAccount>,
     own: i64,
     clock: HashMap<String, String>,
     entry: HashMap<String, String>,
@@ -127,7 +127,7 @@ impl Floor {
         }
         if self.allowed.contains(caps::LABOUR_MANAGE) {
             let c = self.pages.db.get().await?;
-            match bilibi_user::company_accounts::list(&**c, scope, company).await {
+            match bilibi_user::UserService::list_company_accounts_on(&**c, scope, company).await {
                 Ok(users) => self.labour.users = users,
                 Err(e) => self.error = Some(e.to_string()),
             }
