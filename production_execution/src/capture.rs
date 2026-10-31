@@ -214,12 +214,12 @@ pub(crate) async fn insert(
     })).await?;
     Ok(public(get(tx.sql(), scope, company, table, id).await?))
 }
-pub(crate) fn recorded(scope: &Scope, company: i64) -> Result<Value> {
+pub(crate) fn recorded(scope: &Scope) -> Result<Value> {
     if scope.impersonator().is_some() {
         return Err(Error::Capture("Capture refused under impersonation"));
     }
-    if scope.current_company().map(|id| id.get()) != Some(company) {
-        return Err(Error::Capture("Recorder company mismatch"));
+    if scope.principal().is_some() || scope.actor().person().is_none() {
+        return Err(Error::Capture("Capture not authorized"));
     }
     Ok(match scope.agent() {
         Some(agent) => {
@@ -305,7 +305,7 @@ impl ProductionExecution {
         company: i64,
         cap: &str,
     ) -> Result<Value> {
-        let recorder = recorded(scope, company)?;
+        let recorder = recorded(scope)?;
         let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
         bilibi_company::authorize_work_target(&**c, scope, company, cap)
             .await
