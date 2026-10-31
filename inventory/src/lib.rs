@@ -440,7 +440,7 @@ impl Inventory {
     /// and authorization and seeing any earlier posting in that transaction.
     pub async fn get_identity_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         identity_id: i64,
@@ -453,7 +453,7 @@ impl Inventory {
     /// mutation connection; a hold ages from it, not from the identity's source.
     pub async fn get_identity_last_added_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         identity_id: i64,
@@ -560,7 +560,7 @@ impl Inventory {
     /// retaining authorization without acquiring a second pooled connection.
     pub async fn get_transaction_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         transaction_id: i64,
@@ -610,7 +610,7 @@ impl Inventory {
     /// seeing pending writes without acquiring another pool connection.
     pub async fn get_item_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         id: i64,
@@ -621,7 +621,7 @@ impl Inventory {
     /// Transaction-aware material read; see [`Inventory::get_item_on`].
     pub async fn get_material_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         id: i64,
@@ -632,7 +632,7 @@ impl Inventory {
     /// Transaction-aware unit read; see [`Inventory::get_item_on`].
     pub async fn get_unit_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         scope: &Scope,
         company_id: i64,
         id: i64,

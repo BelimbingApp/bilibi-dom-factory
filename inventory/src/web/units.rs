@@ -228,8 +228,7 @@ impl Units {
             PageVariant::List,
             Header {
                 title: text("Units"),
-                subtitle:
-                    "Company units used by materials and conversions. Codes stay stable after creation.",
+                subtitle: "Company units used by materials and conversions. Codes stay stable after creation.",
                 actions,
                 ..Header::default()
             },

@@ -18,6 +18,7 @@ inventory::submit! { Contribution::new(VOCABULARY,"factory/product_definition",P
 bilibi_menu::contribute!(
     "factory/product_definition",
     MenuItem::page("admin.factory.resources", "Resources", "/factory/resources")
+        .company_scoped()
         .under("admin.factory")
         .requires(Requirement::Capability(VIEW))
         .order(60)
@@ -29,6 +30,7 @@ bilibi_menu::contribute!(
         "BOM formulas & routings",
         "/factory/definitions"
     )
+    .company_scoped()
     .under("admin.factory")
     .requires(Requirement::Capability(VIEW))
     .order(70)
@@ -38,7 +40,7 @@ macro_rules! page_route {
     ($id:literal, $path:literal, $operation:literal) => {
         inventory::submit! { Contribution::new(ROUTES, $id, Provenance {
             module:"factory/product_definition",source:file!(),line:line!(),
-        }, &Route {
+        }, &Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
             method:Method::Get, path:$path, service:crate::PAGES, operation:$operation,
             access:Access::Capability(VIEW), framed:true,
         }) }

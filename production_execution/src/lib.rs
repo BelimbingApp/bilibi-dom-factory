@@ -61,8 +61,8 @@ impl ProductionExecution {
     /// company are proven.
     async fn read_client(&self, scope: &Scope, company: i64) -> Result<deadpool_postgres::Object> {
         let client = self.db.get().await.map_err(bilibi_database::Error::from)?;
-        bilibi_authz::authorize_key(&**client, scope, contributions::FLOOR_VIEW).await?;
-        bilibi_company::require_live(&**client, scope, company).await?;
+        bilibi_company::authorize_work_target(&**client, scope, company, contributions::FLOOR_VIEW)
+            .await?;
         Ok(client)
     }
 
@@ -109,7 +109,7 @@ impl ProductionExecution {
         new: &NewOrder,
         source: Source,
     ) -> Result<Order> {
-        bilibi_company::authorize_target(
+        bilibi_company::authorize_work_target(
             tx.sql(),
             scope,
             company,

@@ -76,7 +76,7 @@ pub struct StockPosition {
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -86,7 +86,7 @@ pub(crate) async fn get(
 }
 
 pub(crate) async fn read(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     id: i64,
@@ -138,7 +138,7 @@ pub(crate) async fn read(
 /// Reads the transactions `sql` selects as `id` (`$1` tenant, `$2` company,
 /// then `params`), in the order it gives.
 pub(crate) async fn read_selected(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     sql: &str,
@@ -156,7 +156,7 @@ pub(crate) async fn read_selected(
 /// The corrections of a transaction, following corrections of corrections,
 /// in ID order.
 pub(crate) async fn corrections(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -166,7 +166,7 @@ pub(crate) async fn corrections(
 }
 
 pub(crate) async fn corrections_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -176,7 +176,7 @@ pub(crate) async fn corrections_authorized(
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     item: Option<i64>,
@@ -193,7 +193,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn position(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     item: i64,
@@ -215,7 +215,7 @@ pub(crate) async fn position(
 /// caller has already proven access; this serves a review made inside a
 /// write's own transaction.
 pub(crate) async fn stock_text(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     item: i64,
@@ -225,7 +225,7 @@ pub(crate) async fn stock_text(
 }
 
 async fn location_exists(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     location: i64,
@@ -673,7 +673,9 @@ async fn stock_suffices(
         ),
     ];
     for (group, matched, filter, error) in checks {
-        let sql = format!("SELECT NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($3) AS p(material_id bigint,location_id bigint,identity_id bigint,native_quantity numeric) WHERE true {filter} GROUP BY {group} HAVING -sum(p.native_quantity) > (SELECT COALESCE(sum(e.native_quantity),0) FROM factory_inventory_transaction_entries e WHERE e.tenant_id=$1 AND e.company_id=$2 AND e.role='stock' AND {matched}))");
+        let sql = format!(
+            "SELECT NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($3) AS p(material_id bigint,location_id bigint,identity_id bigint,native_quantity numeric) WHERE true {filter} GROUP BY {group} HAVING -sum(p.native_quantity) > (SELECT COALESCE(sum(e.native_quantity),0) FROM factory_inventory_transaction_entries e WHERE e.tenant_id=$1 AND e.company_id=$2 AND e.role='stock' AND {matched}))"
+        );
         let sufficient: bool = tx
             .sql()
             .query_one(&sql, &[&tenant, &company, &draws])

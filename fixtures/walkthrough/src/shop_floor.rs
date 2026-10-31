@@ -77,7 +77,7 @@ async fn main() -> Result<(), Error> {
     // needs actual company-affiliated workers and a supervisor, not a bypass
     // for an unlinked tenant administrator. Fixture setup only, before login.
     for user in [2_i64, 3, 4] {
-        c.execute("WITH p AS (INSERT INTO persons(tenant_id,name,kind) SELECT tenant_id,name,'human' FROM users WHERE tenant_id=1 AND id=$1 RETURNING id,tenant_id), a AS (INSERT INTO person_affiliations(tenant_id,person_id,organisation_id) SELECT tenant_id,id,1 FROM p RETURNING id,person_id,tenant_id,organisation_id) UPDATE users u SET person_id=a.person_id,affiliation_id=a.id,organisation_id=a.organisation_id FROM a WHERE u.tenant_id=a.tenant_id AND u.id=$1",&[&user]).await?;
+        c.execute("WITH p AS (INSERT INTO persons(tenant_id,name,kind,code) SELECT tenant_id,name,'human','factory_worker_'||id::text FROM users WHERE tenant_id=1 AND id=$1 RETURNING id,tenant_id), u AS (UPDATE users u SET person_id=p.id FROM p WHERE u.tenant_id=p.tenant_id AND u.id=$1 RETURNING u.tenant_id,u.person_id) INSERT INTO user_desks(tenant_id,person_id,company_id) SELECT tenant_id,person_id,1 FROM u ON CONFLICT DO NOTHING",&[&user]).await?;
     }
     // Do not reconcile XP1's roles away. Grants are real authenticated writes.
     let (admin, token) = login(&app, "admin@example.test").await?;

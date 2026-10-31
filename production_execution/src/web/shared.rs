@@ -12,8 +12,7 @@ pub(super) fn render(value: impl Template) -> Result<Html> {
 }
 pub(super) fn company(scope: &Scope) -> Result<i64> {
     scope
-        .actor()
-        .organisation()
+        .current_company()
         .map(|id| id.get())
         .ok_or(Error::NotFound)
 }

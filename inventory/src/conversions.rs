@@ -29,8 +29,7 @@ pub struct Conversion {
 }
 
 const COLUMNS: &str = "c.id,c.version,c.factor,u.id AS unit_id,u.company_id,u.code,u.name,u.retired_at IS NOT NULL AS retired";
-const FROM: &str =
-    "factory_inventory_unit_conversions c JOIN factory_inventory_units u ON u.company_id=c.company_id AND u.id=c.unit_id";
+const FROM: &str = "factory_inventory_unit_conversions c JOIN factory_inventory_units u ON u.company_id=c.company_id AND u.id=c.unit_id";
 fn read(row: &Row, item_id: i64, native_unit: &Unit) -> Conversion {
     Conversion {
         id: row.get("id"),
@@ -50,7 +49,7 @@ fn read(row: &Row, item_id: i64, native_unit: &Unit) -> Conversion {
 
 /// Every version of an item's conversions, by unit code then version.
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,
@@ -70,7 +69,7 @@ pub(crate) async fn list(
 
 /// The conversion from `unit_id`: the current version, or `version`.
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,
@@ -82,7 +81,7 @@ pub(crate) async fn get(
 }
 
 pub(crate) async fn get_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,

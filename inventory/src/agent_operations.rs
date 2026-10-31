@@ -347,7 +347,7 @@ fn parse_posting(input: &Value) -> Outcome<PostingRequest> {
 /// The effective time, resolved by PostgreSQL so no calendar library is
 /// needed here; the schema has already checked the format.
 async fn effective(
-    client: &impl tokio_postgres::GenericClient,
+    client: &(impl tokio_postgres::GenericClient + Sync),
     input: &Value,
 ) -> Outcome<Option<SystemTime>> {
     match input["effective_at"].as_str() {
@@ -750,16 +750,22 @@ fn locations_output() -> Value {
     json!({"type":"array","description":"Stock locations ordered by code."})
 }
 fn transaction_output() -> Value {
-    one("A Material Transaction: id, kind, request_id, actor, evidence, reason, effective_at and recorded_at, context, its signed entries (exact native_quantity strings; role stock, boundary or variance) and genealogy links.")
+    one(
+        "A Material Transaction: id, kind, request_id, actor, evidence, reason, effective_at and recorded_at, context, its signed entries (exact native_quantity strings; role stock, boundary or variance) and genealogy links.",
+    )
 }
 fn transactions_output() -> Value {
     json!({"type":"array","description":"Material Transactions, each as transaction.get returns, newest first unless stated."})
 }
 fn position_output() -> Value {
-    one("The exact stock of an item at a location as a decimal string in the material's native unit.")
+    one(
+        "The exact stock of an item at a location as a decimal string in the material's native unit.",
+    )
 }
 fn balance_output() -> Value {
-    one("A transaction's balance net of its corrections: per native unit the observed input, output, difference and variance, and cross-unit agreement, as exact decimal strings.")
+    one(
+        "A transaction's balance net of its corrections: per native unit the observed input, output, difference and variance, and cross-unit agreement, as exact decimal strings.",
+    )
 }
 fn identity_output() -> Value {
     one("A lot or unit identity: item_id, kind, code, source_transaction_id and dimensions.")
@@ -768,7 +774,9 @@ fn positions_output() -> Value {
     json!({"type":"array","description":"The identity's positive stock by location, as exact decimal strings."})
 }
 fn trace_output() -> Value {
-    one("A genealogy trace: the root, every identity reached, the transform links walked and the receipts among their sources.")
+    one(
+        "A genealogy trace: the root, every identity reached, the transform links walked and the receipts among their sources.",
+    )
 }
 fn posted_output() -> Value {
     one("The recorded Material Transaction, as transaction.get returns it.")

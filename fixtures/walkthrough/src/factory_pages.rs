@@ -64,19 +64,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The Platform fixture leaves the viewer unlinked. Affiliation is proof
     // data only, matching the manager's company. Allocate IDs so the floor
     // walkthrough can still add its workers after an empty-state capture.
-    db.get().await?.batch_execute(
-        "WITH p AS (
-             INSERT INTO persons(tenant_id,name,kind,email)
-             SELECT tenant_id,name,'human',email FROM users
-             WHERE tenant_id=1 AND id=2 AND person_id IS NULL AND affiliation_id IS NULL
+    db.get()
+        .await?
+        .batch_execute(
+            "WITH p AS (
+             INSERT INTO persons(tenant_id,name,code,kind,email)
+             SELECT tenant_id,name,'factory_viewer','human',email FROM users
+             WHERE tenant_id=1 AND id=2 AND person_id IS NULL
              RETURNING id,tenant_id
-         ), a AS (
-             INSERT INTO person_affiliations(tenant_id,person_id,organisation_id)
-             SELECT tenant_id,id,1 FROM p RETURNING id,person_id,tenant_id,organisation_id
-         )
-         UPDATE users u SET person_id=a.person_id,affiliation_id=a.id,organisation_id=a.organisation_id
-         FROM a WHERE u.tenant_id=a.tenant_id AND u.id=2;",
-    ).await?;
+         ), u AS (
+             UPDATE users u SET person_id=p.id FROM p WHERE u.tenant_id=p.tenant_id AND u.id=2
+             RETURNING u.tenant_id,u.person_id
+         ) INSERT INTO user_desks(tenant_id,person_id,company_id)
+           SELECT tenant_id,person_id,1 FROM u ON CONFLICT DO NOTHING;",
+        )
+        .await?;
     let app = bilibi_web::App::new(db, &origin)?;
     app.services
         .get::<Grants>("base/authz.grants")?

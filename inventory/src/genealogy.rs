@@ -57,7 +57,7 @@ pub(crate) enum Direction {
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -67,7 +67,7 @@ pub(crate) async fn get(
 }
 
 pub(crate) async fn get_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -83,7 +83,7 @@ pub(crate) async fn get_authorized(
 /// quantity of it into stock. An addition to an existing identity counts, so
 /// the identity's newest quantity is never aged from its first posting.
 pub(crate) async fn last_added(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -94,7 +94,7 @@ pub(crate) async fn last_added(
 }
 
 pub(crate) async fn last_added_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -104,7 +104,7 @@ pub(crate) async fn last_added_authorized(
 }
 
 async fn fetch(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     tenant: i64,
     company: i64,
     ids: &[i64],
@@ -130,7 +130,7 @@ async fn fetch(
 }
 
 pub(crate) async fn positions(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -159,7 +159,7 @@ pub(crate) async fn positions(
 }
 
 pub(crate) async fn trace(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -170,7 +170,7 @@ pub(crate) async fn trace(
 }
 
 pub(crate) async fn trace_authorized(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -182,7 +182,9 @@ pub(crate) async fn trace_authorized(
         Direction::Backward => ("o", "i"),
         Direction::Forward => ("i", "o"),
     };
-    let sql = format!("SELECT i.identity_id,o.identity_id,l.transaction_id FROM factory_inventory_genealogy_links l JOIN factory_inventory_transaction_entries i ON i.company_id=l.company_id AND i.id=l.input_entry_id JOIN factory_inventory_transaction_entries o ON o.company_id=l.company_id AND o.id=l.output_entry_id WHERE l.tenant_id=$1 AND l.company_id=$2 AND {from}.identity_id=ANY($3) AND {to}.identity_id IS NOT NULL");
+    let sql = format!(
+        "SELECT i.identity_id,o.identity_id,l.transaction_id FROM factory_inventory_genealogy_links l JOIN factory_inventory_transaction_entries i ON i.company_id=l.company_id AND i.id=l.input_entry_id JOIN factory_inventory_transaction_entries o ON o.company_id=l.company_id AND o.id=l.output_entry_id WHERE l.tenant_id=$1 AND l.company_id=$2 AND {from}.identity_id=ANY($3) AND {to}.identity_id IS NOT NULL"
+    );
     let mut visited = BTreeSet::from([root.id]);
     let mut frontier = vec![root.id];
     let mut links = BTreeSet::new();
@@ -222,7 +224,7 @@ pub(crate) async fn trace_authorized(
 
 /// The consumptions and transforms that drew the identity, in ID order.
 pub(crate) async fn draws(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,

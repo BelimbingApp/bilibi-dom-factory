@@ -124,7 +124,7 @@ impl ProductionExecution {
                 capture::get(tx.sql(),scope,company,Table::Labour,id).await?
             }else{
                 orders::get_order(tx.sql(),scope,company,target).await?;
-                bilibi_user::company_accounts::get(tx.sql(),scope,company,worker).await.map_err(|_|Error::Capture("Worker not found"))?;
+                bilibi_user::UserService::company_account_on(tx.sql(),scope,company,worker).await.map_err(|_|Error::Capture("Worker not found"))?;
                 json!({"order_id":target,"worker_user_id":worker})
             };
             let old_role=row["role_id"].as_i64();
@@ -175,8 +175,19 @@ impl ProductionExecution {
         capture::finish(tx, result).await
     }
     pub async fn clock_out(&self, scope: &Scope, company: i64, entry: i64) -> Result<Value> {
-        capture::recorded(scope, company)?;
+        capture::recorded(scope)?;
         let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
+        if !bilibi_company::reachable(
+            &**c,
+            scope,
+            company
+                .try_into()
+                .map_err(|_| Error::Capture("Recorder company mismatch"))?,
+        )
+        .await?
+        {
+            return Err(Error::Capture("Recorder company mismatch"));
+        }
         let old = capture::get(&**c, scope, company, Table::Labour, entry).await?;
         drop(c);
         let cap = capability(scope, capture::id(&old, "worker_user_id")?);

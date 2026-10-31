@@ -61,7 +61,17 @@ impl Kind {
         }
     }
     fn subtitle(self) -> &'static str {
-        match self { Self::Wastage => "Why material is scrapped on a run, as operators choose it on the shop floor.", Self::Labour => "The roles people work in on a run, as they clock in on the shop floor.", Self::Measurement => "What operators measure on a run's output, with its unit and the limits a value is flagged outside." }
+        match self {
+            Self::Wastage => {
+                "Why material is scrapped on a run, as operators choose it on the shop floor."
+            }
+            Self::Labour => {
+                "The roles people work in on a run, as they clock in on the shop floor."
+            }
+            Self::Measurement => {
+                "What operators measure on a run's output, with its unit and the limits a value is flagged outside."
+            }
+        }
     }
     fn empty(self) -> &'static str {
         match self {
