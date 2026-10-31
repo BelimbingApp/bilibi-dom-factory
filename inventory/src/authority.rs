@@ -111,13 +111,13 @@ impl<'a> ProductionImport<'a> {
     /// caller's connection. Sibling facades use this for import validation.
     pub async fn authorize_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
     ) -> Result<(), bilibi_database::Error> {
         let capability = self
             .authority
             .import_capability
             .ok_or(bilibi_database::Error::Forbidden)?;
-        bilibi_company::authorize_target(client, self.scope, self.company, capability).await?;
+        bilibi_company::authorize_work_target(client, self.scope, self.company, capability).await?;
         bilibi_company::require_live(client, self.scope, self.company).await?;
         Ok(())
     }

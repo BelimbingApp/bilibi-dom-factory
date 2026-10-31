@@ -85,11 +85,7 @@ async fn main() -> Result<(), Error> {
     let page = app
         .services
         .get::<PageService<Scope, DbError>>("factory/production_execution.pages")?;
-    let company = manager
-        .actor()
-        .organisation()
-        .ok_or("manager company")?
-        .get();
+    let company = manager.current_company().ok_or("manager company")?.get();
     let c = db.get().await?;
     let order:i64=c.query_one("SELECT id FROM factory_production_orders WHERE tenant_id=$1 AND company_id=$2 AND code='ORD-1'",&[&manager.tenant(),&company]).await?.get(0);
     let run:i64=c.query_one("SELECT id FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=$2 AND request_id='run-1'",&[&manager.tenant(),&company]).await?.get(0);

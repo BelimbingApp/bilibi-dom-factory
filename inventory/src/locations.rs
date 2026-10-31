@@ -39,7 +39,7 @@ fn read(row: &Row) -> Location {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     requested: Option<i64>,
@@ -58,7 +58,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     location_id: i64,

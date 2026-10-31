@@ -81,7 +81,7 @@ fn audited(material: &Material) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     requested: Option<i64>,
@@ -100,7 +100,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,
@@ -114,16 +114,19 @@ pub(crate) async fn get(
 /// locks the material row while it changes and serialises its conversion
 /// versions.
 pub(crate) async fn fetch(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: i64,
     lock: &str,
 ) -> Result<(i64, Material), Error> {
-    let sql =
-        format!(
+    let sql = format!(
         "SELECT {COLUMNS} FROM {FROM} WHERE m.tenant_id=$1 AND m.company_id=$2 AND m.item_id=$3 {}",
-        if lock.is_empty() { "" } else { "FOR UPDATE OF m" }
+        if lock.is_empty() {
+            ""
+        } else {
+            "FOR UPDATE OF m"
+        }
     );
     match client
         .query_opt(&sql, &[&scope.tenant(), &company_id, &item_id])
@@ -141,7 +144,7 @@ pub(crate) async fn fetch(
 /// takes no new material. The type is held `FOR SHARE` so its definitions
 /// cannot change before the material commits.
 async fn typed(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     typing: &MaterialTyping,
@@ -166,7 +169,7 @@ async fn typed(
 /// held `FOR SHARE` against retirement), the type and values, and that the
 /// item is not yet a material.
 async fn accept(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     item_id: Option<i64>,

@@ -43,7 +43,7 @@ and a company ID; the company must be live and inside the scope's tenant.
 | `posting_authority_registered` | none | whether a reference is a contributed authority |
 
 A write also needs the company as an authorized target (the actor's own
-company, or `admin.company.tenant-wide.manage`) and a company that is not
+company through an explicit desk) and a company that is not
 archived; it runs in one `MutationBoundary` transaction, so each change is
 audited under its table name, and the capability is checked again inside the
 transaction. A record of another company is reported as not found. Failures are

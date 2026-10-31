@@ -40,10 +40,18 @@ impl Table {
     fn fields(self) -> &'static str {
         match self {
             Self::Reasons | Self::Roles => "tenant_id,company_id,code,label,active",
-            Self::Types => "tenant_id,company_id,code,label,active,value_type,unit,minimum,maximum,target",
-            Self::Wastage => "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,reason_id,item_id,location_id,identity_id,quantity,unit_id,observation,note,occurred_at,inventory_transaction_id,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id",
-            Self::Labour => "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,worker_user_id,role_id,started_at,stopped_at,note,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id,stopped_by_type,stopped_by_id,stopped_by_acting_for_user_id",
-            Self::Measurements => "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,measurement_type_id,identity_id,value_type,value,unit,minimum,maximum,target,out_of_range,measured_at,note,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id",
+            Self::Types => {
+                "tenant_id,company_id,code,label,active,value_type,unit,minimum,maximum,target"
+            }
+            Self::Wastage => {
+                "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,reason_id,item_id,location_id,identity_id,quantity,unit_id,observation,note,occurred_at,inventory_transaction_id,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id"
+            }
+            Self::Labour => {
+                "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,worker_user_id,role_id,started_at,stopped_at,note,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id,stopped_by_type,stopped_by_id,stopped_by_acting_for_user_id"
+            }
+            Self::Measurements => {
+                "tenant_id,company_id,order_id,execution_id,request_id,request_fingerprint,measurement_type_id,identity_id,value_type,value,unit,minimum,maximum,target,out_of_range,measured_at,note,corrects_id,correction_reason,recorded_by_type,recorded_by_id,recorded_by_acting_for_user_id"
+            }
         }
     }
     fn expression(self) -> String {
@@ -102,7 +110,7 @@ pub(crate) fn request(v: &Value) -> Result<&str> {
         .ok_or(Error::Capture("Invalid request id"))
 }
 pub(crate) async fn fingerprint(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     action: &str,
     target: i64,
     attrs: &Value,
@@ -116,7 +124,7 @@ pub(crate) async fn fingerprint(
     .get(0))
 }
 pub(crate) async fn get(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     table: Table,
@@ -135,7 +143,7 @@ pub(crate) async fn get(
     .ok_or(table.missing())
 }
 pub(crate) async fn list(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     table: Table,
@@ -148,7 +156,11 @@ pub(crate) async fn list(
         _ => ("($4::boolean IS NULL OR active=$4)", "code"),
     };
     // Both optional parameters are typed even when the table doesn't use one.
-    let sql = format!("SELECT {} FROM {} t WHERE tenant_id=$1 AND company_id=$2 AND ($3::bigint IS NULL OR true) AND ($4::boolean IS NULL OR true) AND {filter} ORDER BY {order}",table.expression(),table.name());
+    let sql = format!(
+        "SELECT {} FROM {} t WHERE tenant_id=$1 AND company_id=$2 AND ($3::bigint IS NULL OR true) AND ($4::boolean IS NULL OR true) AND {filter} ORDER BY {order}",
+        table.expression(),
+        table.name()
+    );
     Ok(
         c.query(&sql, &[&scope.tenant(), &company, &parent, &active])
             .await?
@@ -158,7 +170,7 @@ pub(crate) async fn list(
     )
 }
 pub(crate) async fn replay(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     table: Table,
@@ -206,7 +218,7 @@ pub(crate) fn recorded(scope: &Scope, company: i64) -> Result<Value> {
     if scope.impersonator().is_some() {
         return Err(Error::Capture("Capture refused under impersonation"));
     }
-    if scope.actor().organisation().map(|id| id.get()) != Some(company) {
+    if scope.current_company().map(|id| id.get()) != Some(company) {
         return Err(Error::Capture("Recorder company mismatch"));
     }
     Ok(match scope.agent() {
@@ -219,17 +231,17 @@ pub(crate) fn recorded(scope: &Scope, company: i64) -> Result<Value> {
     })
 }
 pub(crate) async fn writable(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     cap: &str,
 ) -> Result<()> {
-    bilibi_company::authorize_target(c, scope, company, cap).await?;
+    bilibi_company::authorize_work_target(c, scope, company, cap).await?;
     bilibi_company::require_writable(c, scope, company, true).await?;
     Ok(())
 }
 pub(crate) async fn time(
-    c: &impl GenericClient,
+    c: &(impl GenericClient + Sync),
     value: &Value,
     lower: Option<std::time::SystemTime>,
     error: &'static str,
@@ -295,7 +307,7 @@ impl ProductionExecution {
     ) -> Result<Value> {
         let recorder = recorded(scope, company)?;
         let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
-        bilibi_company::authorize_target(&**c, scope, company, cap)
+        bilibi_company::authorize_work_target(&**c, scope, company, cap)
             .await
             .map_err(|_| Error::Capture("Capture not authorized"))?;
         Ok(recorder)

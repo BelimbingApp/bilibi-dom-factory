@@ -204,7 +204,7 @@ impl Floor {
         self.display = self
             .pages
             .display
-            .display(&**c, scope, scope.actor().organisation(), locale)
+            .display(&**c, scope, scope.current_company(), locale)
             .await?;
         drop(c);
         match self.pages.execution.list_orders(scope, company, None).await {

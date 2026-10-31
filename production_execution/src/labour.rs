@@ -124,7 +124,7 @@ impl ProductionExecution {
                 capture::get(tx.sql(),scope,company,Table::Labour,id).await?
             }else{
                 orders::get_order(tx.sql(),scope,company,target).await?;
-                bilibi_user::company_accounts::get(tx.sql(),scope,company,worker).await.map_err(|_|Error::Capture("Worker not found"))?;
+                bilibi_user::UserService::company_account_on(tx.sql(),scope,company,worker).await.map_err(|_|Error::Capture("Worker not found"))?;
                 json!({"order_id":target,"worker_user_id":worker})
             };
             let old_role=row["role_id"].as_i64();

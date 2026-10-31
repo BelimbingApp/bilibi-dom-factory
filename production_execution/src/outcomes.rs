@@ -221,7 +221,10 @@ impl ProductionExecution {
         import: Option<&ProductionImport<'_>>,
     ) -> Result<Vec<Execution>> {
         let client = self.outcome_client(scope, company, import).await?;
-        let sql = format!("SELECT {} FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=$2 AND inventory_transaction_id=ANY($3) ORDER BY completed_at,id", orders::EXECUTION_COLUMNS);
+        let sql = format!(
+            "SELECT {} FROM factory_operation_executions WHERE tenant_id=$1 AND company_id=$2 AND inventory_transaction_id=ANY($3) ORDER BY completed_at,id",
+            orders::EXECUTION_COLUMNS
+        );
         let rows = client
             .query(&sql, &[&scope.tenant(), &company, &ids])
             .await?;

@@ -82,7 +82,7 @@ fn hold_override(row: &Row) -> Result<HoldOverride> {
 }
 
 pub(crate) async fn get_order(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -98,7 +98,7 @@ pub(crate) async fn get_order(
 }
 
 pub(crate) async fn list_orders(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     limit: i64,
@@ -115,7 +115,7 @@ pub(crate) async fn list_orders(
 }
 
 pub(crate) async fn get_execution(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     id: i64,
@@ -132,7 +132,7 @@ pub(crate) async fn get_execution(
 
 /// Most recently completed first.
 pub(crate) async fn list_executions(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     order: i64,
@@ -150,7 +150,7 @@ pub(crate) async fn list_executions(
 }
 
 pub(crate) async fn recorded(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     request_id: &str,
@@ -165,7 +165,7 @@ pub(crate) async fn recorded(
 }
 
 pub(crate) async fn hold_overrides(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company: i64,
     execution: i64,

@@ -18,7 +18,7 @@ pub(super) fn render(fragment: impl Template) -> Result<Html> {
 
 /// The company of the signed-in account, as Bilimbi's `user["company_id"]`.
 pub(super) fn company(scope: &Scope) -> Option<i64> {
-    scope.actor().organisation().map(|id| id.get())
+    scope.current_company().map(|id| id.get())
 }
 
 /// Whether the actor holds `key` now (Bilimbi `Authz.can`).

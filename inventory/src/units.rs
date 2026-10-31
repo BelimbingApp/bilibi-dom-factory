@@ -43,7 +43,7 @@ fn audited(unit: &Unit) -> Value {
 }
 
 pub(crate) async fn list(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     requested: Option<i64>,
@@ -62,7 +62,7 @@ pub(crate) async fn list(
 }
 
 pub(crate) async fn get(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     unit_id: i64,
@@ -74,7 +74,7 @@ pub(crate) async fn get(
 /// Reads a unit, optionally with a row lock (`FOR SHARE` while a material or
 /// conversion takes it, `FOR UPDATE` while it changes).
 pub(crate) async fn fetch(
-    client: &impl GenericClient,
+    client: &(impl GenericClient + Sync),
     scope: &Scope,
     company_id: i64,
     unit_id: i64,

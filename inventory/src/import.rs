@@ -24,7 +24,7 @@ impl Inventory {
     /// Read immutable identity evidence needed by an import.
     pub async fn get_import_identity_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         id: i64,
     ) -> Result<Identity, Error> {
@@ -36,7 +36,7 @@ impl Inventory {
     /// import's hold age.
     pub async fn get_import_identity_last_added_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         id: i64,
         until: std::time::SystemTime,
@@ -48,7 +48,7 @@ impl Inventory {
     /// Read immutable posting evidence needed by an import.
     pub async fn get_import_transaction_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         id: i64,
     ) -> Result<MaterialTransaction, Error> {
@@ -59,7 +59,7 @@ impl Inventory {
     /// Material lookup needed to prepare an import, without configuration view.
     pub async fn get_import_material_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         item: i64,
     ) -> Result<Material, Error> {
@@ -74,7 +74,7 @@ impl Inventory {
     /// An exact immutable conversion version for an import line.
     pub async fn get_import_conversion_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         item: i64,
         unit: i64,
@@ -95,7 +95,7 @@ impl Inventory {
     /// Backward genealogy needed to recover an import's source lots.
     pub async fn trace_import_backward_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         identity: i64,
     ) -> Result<Trace, Error> {
@@ -114,7 +114,7 @@ impl Inventory {
     /// of corrections. This grants no correction write access.
     pub async fn list_import_corrections_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         transaction: i64,
     ) -> Result<Vec<MaterialTransaction>, Error> {
@@ -125,7 +125,7 @@ impl Inventory {
     /// Recorded balance and conversion evidence used by imported run yield.
     pub async fn get_import_transaction_balance_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         transaction: i64,
     ) -> Result<Balance, Error> {
@@ -136,7 +136,7 @@ impl Inventory {
     /// Native unit metadata used by imported run yield.
     pub async fn get_import_unit_on(
         &self,
-        client: &impl tokio_postgres::GenericClient,
+        client: &(impl tokio_postgres::GenericClient + Sync),
         import: &ProductionImport<'_>,
         unit: i64,
     ) -> Result<Unit, Error> {

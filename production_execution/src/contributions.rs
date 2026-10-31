@@ -35,6 +35,7 @@ inventory::submit! { Contribution::new(VOCABULARY,"factory/production_execution"
 bilibi_menu::contribute!(
     "factory/production_execution",
     bilibi_menu::MenuItem::page("production.factory.floor", "Shop floor", "/factory/floor")
+        .company_scoped()
         .under("production")
         .requires(bilibi_menu::Requirement::Capability(FLOOR_VIEW))
         .order(10)
@@ -42,7 +43,7 @@ bilibi_menu::contribute!(
 inventory::submit! { Contribution::new(
     bilibi_module_registry::contributions::ROUTES,"factory/production_execution.floor",
     Provenance {module:"factory/production_execution",source:file!(),line:line!()},
-    &bilibi_module_registry::contributions::Route {
+    &bilibi_module_registry::contributions::Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method:bilibi_module_registry::contributions::Method::Get,path:"/factory/floor",
         service:crate::PAGES,operation:"floor",
         access:bilibi_module_registry::contributions::Access::Capability(FLOOR_VIEW),framed:true,
@@ -56,6 +57,7 @@ bilibi_menu::contribute!(
         "Wastage reasons",
         "/factory/wastage-reasons"
     )
+    .company_scoped()
     .under("admin.factory")
     .requires(bilibi_menu::Requirement::Capability(VIEW))
     .order(80)
@@ -63,7 +65,7 @@ bilibi_menu::contribute!(
 inventory::submit! { Contribution::new(
     bilibi_module_registry::contributions::ROUTES,"factory/production_execution.wastage-reasons",
     Provenance {module:"factory/production_execution",source:file!(),line:line!()},
-    &bilibi_module_registry::contributions::Route {
+    &bilibi_module_registry::contributions::Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method:bilibi_module_registry::contributions::Method::Get,path:"/factory/wastage-reasons",
         service:crate::PAGES,operation:"wastage-reasons",
         access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
@@ -77,6 +79,7 @@ bilibi_menu::contribute!(
         "Labour roles",
         "/factory/labour-roles"
     )
+    .company_scoped()
     .under("admin.factory")
     .requires(bilibi_menu::Requirement::Capability(VIEW))
     .order(85)
@@ -84,7 +87,7 @@ bilibi_menu::contribute!(
 inventory::submit! { Contribution::new(
     bilibi_module_registry::contributions::ROUTES,"factory/production_execution.labour-roles",
     Provenance {module:"factory/production_execution",source:file!(),line:line!()},
-    &bilibi_module_registry::contributions::Route {
+    &bilibi_module_registry::contributions::Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method:bilibi_module_registry::contributions::Method::Get,path:"/factory/labour-roles",
         service:crate::PAGES,operation:"labour-roles",
         access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,
@@ -98,6 +101,7 @@ bilibi_menu::contribute!(
         "Measurement types",
         "/factory/measurement-types"
     )
+    .company_scoped()
     .under("admin.factory")
     .requires(bilibi_menu::Requirement::Capability(VIEW))
     .order(90)
@@ -105,7 +109,7 @@ bilibi_menu::contribute!(
 inventory::submit! { Contribution::new(
     bilibi_module_registry::contributions::ROUTES,"factory/production_execution.measurement-types",
     Provenance {module:"factory/production_execution",source:file!(),line:line!()},
-    &bilibi_module_registry::contributions::Route {
+    &bilibi_module_registry::contributions::Route { company_scope: bilibi_module_registry::contributions::CompanyScope::Company,
         method:bilibi_module_registry::contributions::Method::Get,path:"/factory/measurement-types",
         service:crate::PAGES,operation:"measurement-types",
         access:bilibi_module_registry::contributions::Access::Capability(VIEW),framed:true,

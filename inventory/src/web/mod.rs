@@ -60,10 +60,7 @@ impl<'a> Ctx<'a> {
         Self {
             pages,
             scope,
-            company: scope
-                .actor()
-                .organisation()
-                .map_or(0, |company| company.get()),
+            company: scope.current_company().map_or(0, |company| company.get()),
         }
     }
 

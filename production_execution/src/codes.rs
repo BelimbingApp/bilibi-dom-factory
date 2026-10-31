@@ -109,13 +109,13 @@ macro_rules! code_facade {
             active: Option<bool>,
         ) -> Result<Vec<Value>> {
             let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
-            bilibi_company::authorize_target(&**c, scope, company, VIEW).await?;
+            bilibi_company::authorize_work_target(&**c, scope, company, VIEW).await?;
             bilibi_company::require_live(&**c, scope, company).await?;
             capture::list(&**c, scope, company, Table::$table, None, active).await
         }
         pub async fn $get(&self, scope: &Scope, company: i64, id: i64) -> Result<Value> {
             let c = self.db.get().await.map_err(bilibi_database::Error::from)?;
-            bilibi_company::authorize_target(&**c, scope, company, VIEW).await?;
+            bilibi_company::authorize_work_target(&**c, scope, company, VIEW).await?;
             bilibi_company::require_live(&**c, scope, company).await?;
             Ok(capture::public(
                 capture::get(&**c, scope, company, Table::$table, id).await?,
