@@ -42,8 +42,7 @@ and a company ID; the company must be live and inside the scope's tenant.
 | `get_identity`, `get_identity_positions`, `trace_backward`, `trace_forward`, `list_identity_draws` | `…configuration.view` | lot and unit genealogy |
 | `posting_authority_registered` | none | whether a reference is a contributed authority |
 
-A write also needs the company as an authorized target (the actor's own
-company through an explicit desk) and a company that is not
+Every read and write needs an explicit desk in the target company and a company that is not
 archived; it runs in one `MutationBoundary` transaction, so each change is
 audited under its table name, and the capability is checked again inside the
 transaction. A record of another company is reported as not found. Failures are
