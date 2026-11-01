@@ -375,7 +375,6 @@ impl Resources {
             ..Button::default()
         })?;
         if self.can_manage {
-            actions.push(&Html::raw(" "));
             actions.push(&s::render(Button {
                 variant: ButtonVariant::Primary,
                 id: "new-resource",

@@ -376,10 +376,8 @@ impl Materials {
     pub(super) async fn render(&self, ctx: &Ctx<'_>) -> Result<String> {
         let manage = ctx.can_manage().await?;
         let mut actions = link("Material types", "/factory/material-types")?;
-        actions.push(&text(" "));
         actions.push(&link("Conversions", "/factory/conversions")?);
         if manage {
-            actions.push(&text(" "));
             actions.push(&primary("new-material", "New material", "new")?);
         }
         let mut body = Html::EMPTY;
