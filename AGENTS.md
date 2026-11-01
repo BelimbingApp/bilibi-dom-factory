@@ -6,7 +6,7 @@ project: it builds only when mounted in a Bilibi checkout at
 `apps/domains/AGENTS.md`, `apps/base/ui/AGENTS.md` and
 `apps/base/ports/README.md` in that checkout before changing anything here; they
 govern this code and are not copied here. Bilimbi's
-[`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory) is the
+[`b-dom-factory`](https://github.com/BelimbingProject/b-dom-factory) is the
 behaviour reference: port IDs, labels, capability keys, flash texts and
 confirmations verbatim.
 

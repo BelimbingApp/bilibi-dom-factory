@@ -1,10 +1,10 @@
 # bilibi-dom-factory
 
-Factory Domain for [Bilibi](https://github.com/BelimbingApp/bilibi): Inventory,
+Factory Domain for [Bilibi](https://github.com/BelimbingProject/bilibi): Inventory,
 Product Definition and Production Execution. It is one
 optional, independently versioned repository that a manufacturing adopter
 mounts into a Bilibi checkout; it does not build on its own. It is the Rust
-port of Bilimbi's [`b-dom-factory`](https://github.com/BelimbingApp/b-dom-factory),
+port of Bilimbi's [`b-dom-factory`](https://github.com/BelimbingProject/b-dom-factory),
 with the same module IDs, capability keys, table names and wording.
 
 | Module | Descriptor ID | Crate | State |
@@ -23,7 +23,7 @@ Clone this repository into a Bilibi checkout at `apps/domains/factory` (a real
 checkout, never a symlink), then work from the Bilibi root:
 
 ```sh
-git clone https://github.com/BelimbingApp/bilibi-dom-factory.git apps/domains/factory
+git clone https://github.com/BelimbingProject/bilibi-dom-factory.git apps/domains/factory
 python3 scripts/discover-modules.py
 cargo build -p bilibi-web
 ```
